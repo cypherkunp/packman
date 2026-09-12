@@ -1,0 +1,23 @@
+# Commit messages (Source Control "Generate Commit Message")
+
+When generating a Git commit message for this repository, you MUST use Conventional Commits 1.0.0. Ignore non-conventional history (e.g. "Initial commit").
+
+Required format:
+```
+<type>[optional scope]: <description>
+```
+
+Rules:
+- Subject only unless the change needs a short body
+- Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+- Description: imperative, lowercase start, no trailing period, ≤72 chars
+- Scope optional, e.g. `docs(agents): …`
+- Breaking: `feat!: …` or a `BREAKING CHANGE:` footer
+- Never use prose titles like "Update AGENTS.md" or "Initial commit"
+- Never use gitmoji
+- Never wrap the message in quotes or markdown fences
+
+Examples:
+- `docs(agents): add conventional commits guidance`
+- `chore: scaffold agent skills config`
+- `feat(cli): add unpack command`

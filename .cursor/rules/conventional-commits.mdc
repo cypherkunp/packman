@@ -1,0 +1,20 @@
+---
+description: Enforce Conventional Commits for all commit messages
+alwaysApply: true
+---
+
+# Conventional Commits
+
+All git commit messages in this repo MUST use Conventional Commits:
+
+```
+<type>[optional scope]: <description>
+```
+
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+
+- Imperative, lowercase description, no trailing period, ≤72 char subject
+- Do not copy non-conventional history (e.g. `Initial commit`)
+- No gitmoji
+
+When writing or suggesting a commit message, output only a valid conventional commit (subject + optional body).
