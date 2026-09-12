@@ -13,6 +13,15 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Issue → PR lifecycle
+
+After an issue is worked on:
+
+1. **Open a PR for review** — push the branch and create a PR (`gh pr create`). Do not treat "pushed commits" as done.
+2. **Link the issue** — put `Closes #<n>` (or `Fixes #<n>`) in the PR body so GitHub ties them together.
+3. **Keep the issue open during review** — do not `gh issue close` when coding finishes.
+4. **Close the issue when the PR closes** — on merge, GitHub auto-closes via the keyword. If the PR is closed without merge and the work is abandoned, close the issue with a comment explaining why.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
