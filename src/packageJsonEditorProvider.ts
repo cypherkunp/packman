@@ -3,10 +3,17 @@ import {
   enrichDependencyRow,
   type EnrichedDependencyRow,
 } from "./enrichDependencyRow";
+import { npmPackageUrl } from "./fetchNpmLatest";
+import { fetchSocketScoresByPurl } from "./fetchSocketScores";
 import { PACKMAN_VIEW_TYPE } from "./openWith";
 import { parsePackageDocument } from "./parsePackageDocument";
 import { toPackageViewModel } from "./packageViewModel";
 import { renderUiModeHtml } from "./renderUiModeHtml";
+import {
+  applySocketEnrichment,
+  socketComponentsFromRows,
+} from "./socketColumn";
+import { resolveSocketCredentials } from "./socketCredentials";
 
 export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvider {
   public static register(): vscode.Disposable {
@@ -28,11 +35,20 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
   ): Promise<void> {
     webviewPanel.webview.options = {
       enableScripts: false,
+      enableCommandUris: ["packman.openSocketSettings"],
     };
 
     const nonce = getNonce();
     let enrichmentByName = new Map<string, EnrichedDependencyRow>();
     let enrichmentGeneration = 0;
+
+    const readSocketCredentials = () => {
+      const config = vscode.workspace.getConfiguration("packman");
+      return resolveSocketCredentials(
+        config.get<string>("socket.apiToken"),
+        config.get<string>("socket.orgSlug"),
+      );
+    };
 
     const updateWebview = () => {
       webviewPanel.webview.html = renderUiModeHtml(
@@ -42,25 +58,48 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
       );
     };
 
-    const refreshEnrichment = async () => {
-      const generation = ++enrichmentGeneration;
+    const seedLocalRows = (): EnrichedDependencyRow[] => {
       const parsed = parsePackageDocument(document.getText());
       if (!parsed.ok) {
         enrichmentByName = new Map();
-        updateWebview();
+        return [];
+      }
+      const model = toPackageViewModel(parsed.value);
+      const rows = model.dependencyBags.flatMap((bag) => bag.rows);
+      const unique = [...new Map(rows.map((row) => [row.name, row])).values()];
+      const socketCredentials = readSocketCredentials();
+      const seeded = unique.map((row) => ({
+        ...row,
+        npmUrl: npmPackageUrl(row.name),
+        socket:
+          socketCredentials.status === "missing"
+            ? ({ kind: "cta" as const })
+            : ({ kind: "empty" as const }),
+      }));
+      enrichmentByName = new Map(seeded.map((row) => [row.name, row]));
+      return seeded;
+    };
+
+    const refreshEnrichment = async () => {
+      const generation = ++enrichmentGeneration;
+      seedLocalRows();
+      updateWebview();
+
+      const parsed = parsePackageDocument(document.getText());
+      if (!parsed.ok) {
         return;
       }
 
       const model = toPackageViewModel(parsed.value);
       const rows = model.dependencyBags.flatMap((bag) => bag.rows);
       const unique = [...new Map(rows.map((row) => [row.name, row])).values()];
-      const token = vscode.workspace
-        .getConfiguration("packman")
-        .get<string>("github.token");
+      const config = vscode.workspace.getConfiguration("packman");
+      const githubTokenRaw = config.get<string>("github.token");
       const githubToken =
-        typeof token === "string" && token.trim().length > 0
-          ? token.trim()
+        typeof githubTokenRaw === "string" && githubTokenRaw.trim().length > 0
+          ? githubTokenRaw.trim()
           : undefined;
+      const socketCredentials = readSocketCredentials();
 
       const next = new Map<string, EnrichedDependencyRow>();
       await Promise.all(
@@ -70,20 +109,37 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
         }),
       );
 
+      const enrichedRows = [...next.values()];
+      let socketResult = undefined;
+      if (socketCredentials.status === "ready") {
+        socketResult = await fetchSocketScoresByPurl({
+          orgSlug: socketCredentials.orgSlug,
+          apiToken: socketCredentials.apiToken,
+          components: socketComponentsFromRows(enrichedRows),
+        });
+      }
+
+      const withSocket = applySocketEnrichment(
+        enrichedRows,
+        socketCredentials,
+        socketResult,
+      );
+      const finalMap = new Map(
+        withSocket.map((row) => [row.name, row] as const),
+      );
+
       if (generation !== enrichmentGeneration) {
         return;
       }
-      enrichmentByName = next;
+      enrichmentByName = finalMap;
       updateWebview();
     };
 
-    updateWebview();
     void refreshEnrichment();
 
     const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
       (event) => {
         if (event.document.uri.toString() === document.uri.toString()) {
-          updateWebview();
           void refreshEnrichment();
         }
       },

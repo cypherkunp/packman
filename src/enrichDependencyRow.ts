@@ -2,6 +2,7 @@ import type { DependencyRow } from "./packageViewModel";
 import { fetchGithubRepoSummary } from "./fetchGithubRepoSummary";
 import { fetchNpmLatest, npmPackageUrl, type FetchLike } from "./fetchNpmLatest";
 import { normalizeGithubRepo } from "./normalizeGithubRepo";
+import type { SocketColumn } from "./socketColumn";
 
 export type EnrichedDependencyRow = DependencyRow & {
   npmUrl: string;
@@ -9,6 +10,7 @@ export type EnrichedDependencyRow = DependencyRow & {
   githubUrl?: string;
   issuesUrl?: string;
   openIssuesCount?: number;
+  socket?: SocketColumn;
 };
 
 export type EnrichmentOptions = {

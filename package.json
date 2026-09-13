@@ -14,7 +14,8 @@
   "activationEvents": [
     "onCustomEditor:packman.packageJson",
     "onCommand:packman.openEditMode",
-    "onCommand:packman.openUiMode"
+    "onCommand:packman.openUiMode",
+    "onCommand:packman.openSocketSettings"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -40,6 +41,10 @@
         "command": "packman.openUiMode",
         "title": "Packman: Open UI Mode",
         "icon": "$(eye)"
+      },
+      {
+        "command": "packman.openSocketSettings",
+        "title": "Packman: Open Socket Settings"
       }
     ],
     "menus": {
@@ -77,6 +82,16 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Optional GitHub personal access token used to raise API rate limits when enriching Dependency rows (repo URL + open issues)."
+        },
+        "packman.socket.apiToken": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Socket.org API token (end-user). Required together with `#packman.socket.orgSlug#` to show Socket scores on Dependency rows."
+        },
+        "packman.socket.orgSlug": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Socket organization slug for `POST /orgs/{org}/purl`. Required together with `#packman.socket.apiToken#`."
         }
       }
     }

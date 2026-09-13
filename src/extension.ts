@@ -12,6 +12,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("packman.openUiMode", () =>
       openPackageJsonWith(PACKMAN_VIEW_TYPE),
     ),
+    vscode.commands.registerCommand("packman.openSocketSettings", async () => {
+      await vscode.commands.executeCommand(
+        "workbench.action.openSettings",
+        "packman.socket",
+      );
+    }),
   );
 }
 

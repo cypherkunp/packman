@@ -49,6 +49,12 @@ describe("renderUiModeHtml", () => {
           githubUrl: "https://github.com/stevemao/left-pad",
           issuesUrl: "https://github.com/stevemao/left-pad/issues",
           openIssuesCount: 7,
+          socket: {
+            kind: "score" as const,
+            overall100: 91,
+            highSeverity: true,
+            url: "https://socket.dev/npm/package/leftpad",
+          },
         },
       ],
     ]);
@@ -65,6 +71,30 @@ describe("renderUiModeHtml", () => {
     assert.match(html, /github\.com\/stevemao\/left-pad/);
     assert.match(html, /issues \+ PRs/);
     assert.match(html, />7</);
+    assert.match(html, />91/);
+    assert.match(html, /socket\.dev\/npm\/package\/leftpad/);
+    assert.match(html, /socket-high/);
+  });
+
+  it("shows Set Socket token CTA when Socket credentials are missing", () => {
+    const enrichment = new Map([
+      [
+        "leftpad",
+        {
+          name: "leftpad",
+          range: "^1.0.0",
+          npmUrl: "https://www.npmjs.com/package/leftpad",
+          socket: { kind: "cta" as const },
+        },
+      ],
+    ]);
+    const html = renderUiModeHtml(
+      JSON.stringify({ dependencies: { leftpad: "^1.0.0" } }),
+      "n",
+      enrichment,
+    );
+    assert.match(html, /Set Socket token/);
+    assert.match(html, /command:packman\.openSocketSettings/);
   });
 
   it("shows a parse error shell for invalid JSON", () => {
