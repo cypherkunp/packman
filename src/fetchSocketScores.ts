@@ -1,3 +1,7 @@
+import {
+  classifyFetchFailure,
+  parseRetryAfterMs,
+} from "./fetchFailures";
 import type { FetchLike } from "./fetchNpmLatest";
 
 export type SocketScoreHit = {
@@ -8,6 +12,9 @@ export type SocketScoreHit = {
 
 export type SocketFetchResult =
   | { status: "ok"; byPurl: Map<string, SocketScoreHit> }
+  | { status: "rate_limited"; retryAfterMs?: number }
+  | { status: "offline" }
+  | { status: "timeout" }
   | { status: "error"; message: string };
 
 export type SocketBatchRequest = {
@@ -61,7 +68,7 @@ export async function fetchSocketScoresByPurl(
       { ...request, components },
       fetchImpl,
     );
-    if (part.status === "error") {
+    if (part.status !== "ok") {
       return part;
     }
     for (const [purl, hit] of part.byPurl) {
@@ -87,6 +94,12 @@ async function fetchSocketScoresChunk(
       body: JSON.stringify({ components: request.components }),
     });
 
+    if (response.status === 429 || response.status === 403) {
+      return {
+        status: "rate_limited",
+        retryAfterMs: parseRetryAfterMs(response.headers),
+      };
+    }
     if (!response.ok) {
       return {
         status: "error",
@@ -120,6 +133,10 @@ async function fetchSocketScoresChunk(
     }
     return { status: "ok", byPurl };
   } catch (error) {
+    const kind = classifyFetchFailure(error);
+    if (kind === "offline" || kind === "timeout") {
+      return { status: kind };
+    }
     return {
       status: "error",
       message: error instanceof Error ? error.message : "Socket fetch failed",

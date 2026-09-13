@@ -22,7 +22,7 @@ export function applySocketEnrichment<T extends SocketEnrichable>(
     return rows.map((row) => ({ ...row, socket: { kind: "cta" as const } }));
   }
 
-  if (!fetchResult || fetchResult.status === "error") {
+  if (!fetchResult || fetchResult.status !== "ok") {
     return rows.map((row) => ({ ...row, socket: { kind: "empty" as const } }));
   }
 

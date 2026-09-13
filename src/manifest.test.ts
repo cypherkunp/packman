@@ -88,4 +88,17 @@ describe("extension manifest", () => {
       ),
     );
   });
+
+  it("contributes refresh enrichment command in the editor title", () => {
+    assert.ok(
+      manifest.contributes.commands.some(
+        (c) => c.command === "packman.refreshEnrichment",
+      ),
+    );
+    assert.ok(
+      manifest.contributes.menus["editor/title"].some(
+        (m) => m.command === "packman.refreshEnrichment",
+      ),
+    );
+  });
 });
