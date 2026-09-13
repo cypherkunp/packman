@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { PACKMAN_VIEW_TYPE } from "./openWith";
-import { buildUiShellHtml } from "./uiShell";
+import { renderUiModeHtml } from "./renderUiModeHtml";
 
 export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvider {
   public static register(): vscode.Disposable {
@@ -16,14 +16,32 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
   }
 
   async resolveCustomTextEditor(
-    _document: vscode.TextDocument,
+    document: vscode.TextDocument,
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken,
   ): Promise<void> {
     webviewPanel.webview.options = {
       enableScripts: false,
     };
-    webviewPanel.webview.html = buildUiShellHtml(getNonce());
+
+    const nonce = getNonce();
+    const updateWebview = () => {
+      webviewPanel.webview.html = renderUiModeHtml(document.getText(), nonce);
+    };
+
+    updateWebview();
+
+    const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(
+      (event) => {
+        if (event.document.uri.toString() === document.uri.toString()) {
+          updateWebview();
+        }
+      },
+    );
+
+    webviewPanel.onDidDispose(() => {
+      changeDocumentSubscription.dispose();
+    });
   }
 }
 
