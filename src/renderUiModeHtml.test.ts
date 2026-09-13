@@ -37,6 +37,36 @@ describe("renderUiModeHtml", () => {
     assert.doesNotMatch(html, /devDependencies/);
   });
 
+  it("renders enrichment columns and click targets when provided", () => {
+    const enrichment = new Map([
+      [
+        "leftpad",
+        {
+          name: "leftpad",
+          range: "^1.0.0",
+          npmUrl: "https://www.npmjs.com/package/leftpad",
+          latest: "1.3.0",
+          githubUrl: "https://github.com/stevemao/left-pad",
+          issuesUrl: "https://github.com/stevemao/left-pad/issues",
+          openIssuesCount: 7,
+        },
+      ],
+    ]);
+    const html = renderUiModeHtml(
+      JSON.stringify({
+        name: "demo",
+        dependencies: { leftpad: "^1.0.0" },
+      }),
+      "n",
+      enrichment,
+    );
+    assert.match(html, /npmjs\.com\/package\/leftpad/);
+    assert.match(html, />1\.3\.0</);
+    assert.match(html, /github\.com\/stevemao\/left-pad/);
+    assert.match(html, /issues \+ PRs/);
+    assert.match(html, />7</);
+  });
+
   it("shows a parse error shell for invalid JSON", () => {
     const html = renderUiModeHtml("{", "n");
     assert.match(html, /Invalid JSON/i);

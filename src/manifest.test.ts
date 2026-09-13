@@ -19,6 +19,9 @@ const manifest = JSON.parse(
     commands: Array<{ command: string }>;
     menus: { "editor/title": Array<{ command: string; when: string }> };
     keybindings: Array<{ command: string; when: string }>;
+    configuration?: {
+      properties?: Record<string, { type?: string }>;
+    };
   };
 };
 
@@ -67,5 +70,11 @@ describe("extension manifest", () => {
 
   it("targets a Cursor-compatible VS Code engine floor", () => {
     assert.match(manifest.engines.vscode, /^\^1\.(8[5-9]|9\d|\d{3,})\./);
+  });
+
+  it("contributes optional packman.github.token setting", () => {
+    const token =
+      manifest.contributes.configuration?.properties?.["packman.github.token"];
+    assert.equal(token?.type, "string");
   });
 });

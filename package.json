@@ -69,7 +69,17 @@
         "mac": "cmd+shift+m",
         "when": "resourceFilename == package.json && activeCustomEditorId != packman.packageJson"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Packman",
+      "properties": {
+        "packman.github.token": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional GitHub personal access token used to raise API rate limits when enriching Dependency rows (repo URL + open issues)."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
