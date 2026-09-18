@@ -15,7 +15,8 @@
     "onCustomEditor:packman.packageJson",
     "onCommand:packman.openEditMode",
     "onCommand:packman.openUiMode",
-    "onCommand:packman.openSocketSettings"
+    "onCommand:packman.openSocketSettings",
+    "onCommand:packman.refreshEnrichment"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -45,12 +46,22 @@
       {
         "command": "packman.openSocketSettings",
         "title": "Packman: Open Socket Settings"
+      },
+      {
+        "command": "packman.refreshEnrichment",
+        "title": "Packman: Refresh Enrichment",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "command": "packman.openEditMode",
+          "when": "activeCustomEditorId == packman.packageJson",
+          "group": "navigation"
+        },
+        {
+          "command": "packman.refreshEnrichment",
           "when": "activeCustomEditorId == packman.packageJson",
           "group": "navigation"
         },

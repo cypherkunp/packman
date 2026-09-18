@@ -1,3 +1,8 @@
+import {
+  classifyFetchFailure,
+  parseRetryAfterMs,
+} from "./fetchFailures";
+
 export type NpmLatestResult =
   | {
       status: "ok";
@@ -6,6 +11,9 @@ export type NpmLatestResult =
       bugsUrl: unknown;
     }
   | { status: "not_found" }
+  | { status: "rate_limited"; retryAfterMs?: number }
+  | { status: "offline" }
+  | { status: "timeout" }
   | { status: "error"; message: string };
 
 export type FetchLike = (
@@ -16,13 +24,20 @@ export type FetchLike = (
 export async function fetchNpmLatest(
   packageName: string,
   fetchImpl: FetchLike = fetch,
+  init?: RequestInit,
 ): Promise<NpmLatestResult> {
   const encoded = encodeNpmPackageName(packageName);
   const url = `https://registry.npmjs.org/${encoded}/latest`;
   try {
-    const response = await fetchImpl(url);
+    const response = await fetchImpl(url, init);
     if (response.status === 404) {
       return { status: "not_found" };
+    }
+    if (response.status === 429 || response.status === 403) {
+      return {
+        status: "rate_limited",
+        retryAfterMs: parseRetryAfterMs(response.headers),
+      };
     }
     if (!response.ok) {
       return {
@@ -45,6 +60,10 @@ export async function fetchNpmLatest(
       bugsUrl: body.bugs?.url,
     };
   } catch (error) {
+    const kind = classifyFetchFailure(error);
+    if (kind === "offline" || kind === "timeout") {
+      return { status: kind };
+    }
     return {
       status: "error",
       message: error instanceof Error ? error.message : "npm fetch failed",

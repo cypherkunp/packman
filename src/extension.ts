@@ -1,9 +1,13 @@
 import * as vscode from "vscode";
 import { PACKMAN_VIEW_TYPE } from "./openWith";
-import { PackageJsonEditorProvider } from "./packageJsonEditorProvider";
+import {
+  enrichmentRefreshEmitter,
+  PackageJsonEditorProvider,
+} from "./packageJsonEditorProvider";
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(PackageJsonEditorProvider.register());
+  context.subscriptions.push(enrichmentRefreshEmitter);
 
   context.subscriptions.push(
     vscode.commands.registerCommand("packman.openEditMode", () =>
@@ -17,6 +21,9 @@ export function activate(context: vscode.ExtensionContext): void {
         "workbench.action.openSettings",
         "packman.socket",
       );
+    }),
+    vscode.commands.registerCommand("packman.refreshEnrichment", () => {
+      enrichmentRefreshEmitter.fire();
     }),
   );
 }

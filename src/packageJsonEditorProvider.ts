@@ -3,8 +3,10 @@ import {
   enrichDependencyRow,
   type EnrichedDependencyRow,
 } from "./enrichDependencyRow";
+import { EnrichmentCache, ENRICHMENT_TTL_MS } from "./enrichmentCache";
 import { npmPackageUrl } from "./fetchNpmLatest";
 import { fetchSocketScoresByPurl } from "./fetchSocketScores";
+import { ENRICHMENT_CONCURRENCY, mapPool } from "./mapPool";
 import { PACKMAN_VIEW_TYPE } from "./openWith";
 import { parsePackageDocument } from "./parsePackageDocument";
 import { toPackageViewModel } from "./packageViewModel";
@@ -14,6 +16,15 @@ import {
   socketComponentsFromRows,
 } from "./socketColumn";
 import { resolveSocketCredentials } from "./socketCredentials";
+
+const FETCH_TIMEOUT_MS = 12_000;
+
+/** Shared across Packman UI mode editors for the extension host lifetime. */
+export const enrichmentCache = new EnrichmentCache<unknown>({
+  ttlMs: ENRICHMENT_TTL_MS,
+});
+
+export const enrichmentRefreshEmitter = new vscode.EventEmitter<void>();
 
 export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvider {
   public static register(): vscode.Disposable {
@@ -41,6 +52,7 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
     const nonce = getNonce();
     let enrichmentByName = new Map<string, EnrichedDependencyRow>();
     let enrichmentGeneration = 0;
+    let forceRefresh = false;
 
     const readSocketCredentials = () => {
       const config = vscode.workspace.getConfiguration("packman");
@@ -58,11 +70,11 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
       );
     };
 
-    const seedLocalRows = (): EnrichedDependencyRow[] => {
+    const seedLocalRows = (): void => {
       const parsed = parsePackageDocument(document.getText());
       if (!parsed.ok) {
         enrichmentByName = new Map();
-        return [];
+        return;
       }
       const model = toPackageViewModel(parsed.value);
       const rows = model.dependencyBags.flatMap((bag) => bag.rows);
@@ -77,11 +89,12 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
             : ({ kind: "empty" as const }),
       }));
       enrichmentByName = new Map(seeded.map((row) => [row.name, row]));
-      return seeded;
     };
 
     const refreshEnrichment = async () => {
       const generation = ++enrichmentGeneration;
+      const refresh = forceRefresh;
+      forceRefresh = false;
       seedLocalRows();
       updateWebview();
 
@@ -100,23 +113,30 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
           ? githubTokenRaw.trim()
           : undefined;
       const socketCredentials = readSocketCredentials();
+      const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
 
-      const next = new Map<string, EnrichedDependencyRow>();
-      await Promise.all(
-        unique.map(async (row) => {
-          const enriched = await enrichDependencyRow(row, { githubToken });
-          next.set(row.name, enriched);
-        }),
+      const enrichedRows = await mapPool(
+        unique,
+        ENRICHMENT_CONCURRENCY,
+        async (row) =>
+          enrichDependencyRow(row, {
+            githubToken,
+            cache: enrichmentCache,
+            signal,
+            forceRefresh: refresh,
+          }),
       );
 
-      const enrichedRows = [...next.values()];
       let socketResult = undefined;
       if (socketCredentials.status === "ready") {
-        socketResult = await fetchSocketScoresByPurl({
-          orgSlug: socketCredentials.orgSlug,
-          apiToken: socketCredentials.apiToken,
-          components: socketComponentsFromRows(enrichedRows),
-        });
+        socketResult = await fetchSocketScoresByPurl(
+          {
+            orgSlug: socketCredentials.orgSlug,
+            apiToken: socketCredentials.apiToken,
+            components: socketComponentsFromRows(enrichedRows),
+          },
+          fetch,
+        );
       }
 
       const withSocket = applySocketEnrichment(
@@ -145,9 +165,16 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
       },
     );
 
+    const refreshSubscription = enrichmentRefreshEmitter.event(() => {
+      forceRefresh = true;
+      enrichmentCache.clear();
+      void refreshEnrichment();
+    });
+
     webviewPanel.onDidDispose(() => {
       enrichmentGeneration += 1;
       changeDocumentSubscription.dispose();
+      refreshSubscription.dispose();
     });
   }
 }

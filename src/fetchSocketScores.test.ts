@@ -98,7 +98,7 @@ describe("fetchSocketScoresByPurl", () => {
       },
       async () => new Response("slow down", { status: 429 }),
     );
-    assert.equal(limited.status, "error");
+    assert.equal(limited.status, "rate_limited");
   });
 });
 
