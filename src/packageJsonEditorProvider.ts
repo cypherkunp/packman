@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { dirname } from "node:path";
 import {
   enrichDependencyRow,
   type EnrichedDependencyRow,
@@ -16,6 +17,7 @@ import {
   socketComponentsFromRows,
 } from "./socketColumn";
 import { resolveSocketCredentials } from "./socketCredentials";
+import { runPackageScript } from "./runPackageScript";
 
 const FETCH_TIMEOUT_MS = 12_000;
 
@@ -25,6 +27,9 @@ export const enrichmentCache = new EnrichmentCache<unknown>({
 });
 
 export const enrichmentRefreshEmitter = new vscode.EventEmitter<void>();
+
+/** Package dirs already warned about lockfile fallback (session-scoped). */
+const scriptFallbackWarnedDirs = new Set<string>();
 
 export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvider {
   public static register(): vscode.Disposable {
@@ -45,7 +50,7 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
     _token: vscode.CancellationToken,
   ): Promise<void> {
     webviewPanel.webview.options = {
-      enableScripts: false,
+      enableScripts: true,
       enableCommandUris: ["packman.openSocketSettings"],
     };
 
@@ -171,10 +176,42 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
       void refreshEnrichment();
     });
 
+    const messageSubscription = webviewPanel.webview.onDidReceiveMessage(
+      (message: unknown) => {
+        if (
+          !message ||
+          typeof message !== "object" ||
+          !("type" in message) ||
+          (message as { type?: unknown }).type !== "runScript"
+        ) {
+          return;
+        }
+        const script = (message as { script?: unknown }).script;
+        if (typeof script !== "string" || script.length === 0) {
+          return;
+        }
+        const packageDir = dirname(document.uri.fsPath);
+        runPackageScript(packageDir, script, {
+          findTerminal: (name) =>
+            vscode.window.terminals.find((t) => t.name === name),
+          createTerminal: (options) =>
+            vscode.window.createTerminal({
+              name: options.name,
+              cwd: options.cwd,
+            }),
+          warn: (text) => {
+            void vscode.window.showWarningMessage(text);
+          },
+          warnedDirs: scriptFallbackWarnedDirs,
+        });
+      },
+    );
+
     webviewPanel.onDidDispose(() => {
       enrichmentGeneration += 1;
       changeDocumentSubscription.dispose();
       refreshSubscription.dispose();
+      messageSubscription.dispose();
     });
   }
 }

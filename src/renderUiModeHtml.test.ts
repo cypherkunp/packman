@@ -17,6 +17,9 @@ describe("renderUiModeHtml", () => {
     assert.match(html, />demo</);
     assert.match(html, />1\.0\.0</);
     assert.match(html, /data-script="build"/);
+    assert.doesNotMatch(html, /\sdisabled(\s|>)/);
+    assert.match(html, /acquireVsCodeApi/);
+    assert.match(html, /type:\s*"runScript"/);
     assert.match(html, />leftpad</);
     assert.match(html, />\^1\.0\.0</);
     assert.match(html, />foo</);
@@ -35,6 +38,20 @@ describe("renderUiModeHtml", () => {
     );
     assert.match(html, /eslintConfig/);
     assert.doesNotMatch(html, /devDependencies/);
+  });
+
+  it("renders objects and arrays inside code blocks", () => {
+    const html = renderUiModeHtml(
+      JSON.stringify({
+        name: "demo",
+        engines: { node: ">=20" },
+        keywords: ["a", "b"],
+      }),
+      "n",
+    );
+    assert.match(html, /<pre class="code-block"><code>/);
+    assert.match(html, /&quot;node&quot;: &quot;&gt;=20&quot;/);
+    assert.match(html, /\[[\s\S]*&quot;a&quot;[\s\S]*&quot;b&quot;[\s\S]*\]/);
   });
 
   it("renders enrichment columns and click targets when provided", () => {

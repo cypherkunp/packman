@@ -28,87 +28,149 @@ function shell(nonce: string, body: string): string {
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Packman</title>
   <style nonce="${nonce}">
     :root { color-scheme: light dark; }
     body {
       margin: 0;
-      padding: 1.25rem 1.5rem 2rem;
+      padding: 1.25rem 1.5rem 2.5rem;
       background: var(--vscode-editor-background);
       color: var(--vscode-foreground);
       font-family: var(--vscode-font-family);
       font-size: var(--vscode-font-size);
       line-height: 1.45;
     }
+    main {
+      max-width: 56rem;
+    }
     h1 {
-      font-size: 1.15rem;
+      font-size: 1.1rem;
       font-weight: 600;
-      margin: 0 0 1rem;
+      margin: 0 0 1.25rem;
+      letter-spacing: -0.01em;
     }
     h2 {
-      font-size: 0.85rem;
+      font-size: 0.72rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
       color: var(--vscode-descriptionForeground);
-      margin: 1.5rem 0 0.6rem;
+      margin: 0 0 0.65rem;
     }
-    .section:first-of-type h2 { margin-top: 0.25rem; }
+    .section {
+      margin-bottom: 1.75rem;
+    }
     dl {
       display: grid;
-      grid-template-columns: max-content 1fr;
-      gap: 0.35rem 1rem;
+      grid-template-columns: minmax(7rem, max-content) 1fr;
+      gap: 0.55rem 1.25rem;
       margin: 0;
+      align-items: start;
     }
     dt {
       color: var(--vscode-descriptionForeground);
+      padding-top: 0.15rem;
     }
     dd {
       margin: 0;
+      min-width: 0;
       font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
-      white-space: pre-wrap;
       word-break: break-word;
+    }
+    pre.code-block {
+      margin: 0;
+      padding: 0.55rem 0.7rem;
+      border-radius: 4px;
+      border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+      background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+      overflow-x: auto;
+      font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+      font-size: 0.9em;
+      line-height: 1.4;
+    }
+    pre.code-block code {
+      font: inherit;
+      color: inherit;
+      white-space: pre;
     }
     .scripts {
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
+      flex-direction: column;
+      gap: 0.4rem;
+      align-items: stretch;
     }
     button.script-button {
       appearance: none;
-      border: 1px solid var(--vscode-button-border, transparent);
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--vscode-button-border, var(--vscode-widget-border, transparent));
       background: var(--vscode-button-secondaryBackground);
       color: var(--vscode-button-secondaryForeground);
-      padding: 0.35rem 0.7rem;
-      border-radius: 2px;
-      cursor: default;
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      cursor: pointer;
       font: inherit;
+      transition: background 120ms ease-out, border-color 120ms ease-out, transform 80ms ease-out;
+    }
+    button.script-button:hover {
+      background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
+    }
+    button.script-button:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 1px;
+    }
+    button.script-button:active {
+      transform: scale(0.99);
+    }
+    button.script-button .name {
+      font-weight: 600;
+      flex-shrink: 0;
     }
     button.script-button .cmd {
-      opacity: 0.7;
-      margin-left: 0.4rem;
-      font-family: var(--vscode-editor-font-family, monospace);
+      opacity: 0.72;
+      font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
       font-size: 0.9em;
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+      border-radius: 4px;
     }
     table {
       width: 100%;
       border-collapse: collapse;
       font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+      font-size: 0.95em;
     }
     th, td {
       text-align: left;
-      padding: 0.35rem 0.5rem;
+      padding: 0.45rem 0.7rem;
       border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+      vertical-align: top;
+    }
+    tr:last-child td {
+      border-bottom: none;
     }
     th {
       color: var(--vscode-descriptionForeground);
       font-weight: 500;
+      font-size: 0.85em;
+      background: var(--vscode-editor-inactiveSelectionBackground, transparent);
     }
-    td.muted {
+    td.muted, .muted {
       color: var(--vscode-descriptionForeground);
-      opacity: 0.7;
+      opacity: 0.75;
     }
     a {
       color: var(--vscode-textLink-foreground);
@@ -134,6 +196,20 @@ function shell(nonce: string, body: string): string {
 </head>
 <body>
 ${body}
+<script nonce="${nonce}">
+(function () {
+  const vscode = acquireVsCodeApi();
+  document.addEventListener("click", function (event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest("button.script-button");
+    if (!(button instanceof HTMLButtonElement)) return;
+    const script = button.getAttribute("data-script");
+    if (!script) return;
+    vscode.postMessage({ type: "runScript", script: script });
+  });
+})();
+</script>
 </body>
 </html>`;
 }
@@ -156,7 +232,7 @@ function packageBody(
     parts.push(`<dl>`);
     for (const field of model.identity) {
       parts.push(
-        `<dt>${escapeHtml(field.key)}</dt><dd>${escapeHtml(formatValue(field.value))}</dd>`,
+        `<dt>${escapeHtml(field.key)}</dt><dd>${renderValue(field.value)}</dd>`,
       );
     }
     parts.push(`</dl></section>`);
@@ -166,7 +242,7 @@ function packageBody(
     parts.push(`<section class="section"><h2>Scripts</h2><div class="scripts">`);
     for (const script of model.scripts) {
       parts.push(
-        `<button type="button" class="script-button" data-script="${escapeAttr(script.name)}" disabled title="${escapeAttr(script.command)}"><span>${escapeHtml(script.name)}</span><span class="cmd">${escapeHtml(script.command)}</span></button>`,
+        `<button type="button" class="script-button" data-script="${escapeAttr(script.name)}" title="Run ${escapeAttr(script.name)}"><span class="name">${escapeHtml(script.name)}</span><span class="cmd">${escapeHtml(script.command)}</span></button>`,
       );
     }
     parts.push(`</div></section>`);
@@ -176,6 +252,7 @@ function packageBody(
     parts.push(
       `<section class="section"><h2>${escapeHtml(bag.bag)}</h2>`,
     );
+    parts.push(`<div class="table-wrap">`);
     parts.push(
       `<table><thead><tr><th>Name</th><th>Range</th><th>Latest</th><th>GitHub</th><th>Open issues</th><th>Socket</th></tr></thead><tbody>`,
     );
@@ -188,13 +265,14 @@ function packageBody(
         } satisfies EnrichedDependencyRow);
       parts.push(dependencyRowHtml(enriched));
     }
-    parts.push(`</tbody></table></section>`);
+    parts.push(`</tbody></table></div></section>`);
   }
 
   if (model.overrides.length > 0) {
     parts.push(
       `<section class="section"><h2>Overrides</h2>`,
     );
+    parts.push(`<div class="table-wrap">`);
     parts.push(
       `<table><thead><tr><th>Key</th><th>Target</th></tr></thead><tbody>`,
     );
@@ -203,14 +281,14 @@ function packageBody(
         `<tr><td>${escapeHtml(entry.key)}</td><td>${escapeHtml(entry.target)}</td></tr>`,
       );
     }
-    parts.push(`</tbody></table></section>`);
+    parts.push(`</tbody></table></div></section>`);
   }
 
   if (model.generic.length > 0) {
     parts.push(`<section class="section"><h2>Other</h2><dl>`);
     for (const field of model.generic) {
       parts.push(
-        `<dt>${escapeHtml(field.key)}</dt><dd>${escapeHtml(formatValue(field.value))}</dd>`,
+        `<dt>${escapeHtml(field.key)}</dt><dd>${renderValue(field.value)}</dd>`,
       );
     }
     parts.push(`</dl></section>`);
@@ -280,11 +358,17 @@ function socketCellHtml(row: EnrichedDependencyRow): string {
   return `<a href="${escapeAttr(socket.url)}" title="Socket score (end-user token)">${socket.overall100}${cue}</a>`;
 }
 
-function formatValue(value: unknown): string {
+function renderValue(value: unknown): string {
   if (typeof value === "string") {
-    return value;
+    return escapeHtml(value);
   }
-  return JSON.stringify(value, null, 2);
+  if (typeof value === "number" || typeof value === "boolean") {
+    return escapeHtml(String(value));
+  }
+  if (value === null) {
+    return escapeHtml("null");
+  }
+  return `<pre class="code-block"><code>${escapeHtml(JSON.stringify(value, null, 2))}</code></pre>`;
 }
 
 function escapeHtml(text: string): string {
