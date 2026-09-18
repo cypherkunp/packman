@@ -77,4 +77,28 @@ describe("extension manifest", () => {
       manifest.contributes.configuration?.properties?.["packman.github.token"];
     assert.equal(token?.type, "string");
   });
+
+  it("contributes Socket end-user token settings", () => {
+    const props = manifest.contributes.configuration?.properties ?? {};
+    assert.equal(props["packman.socket.apiToken"]?.type, "string");
+    assert.equal(props["packman.socket.orgSlug"]?.type, "string");
+    assert.ok(
+      manifest.contributes.commands.some(
+        (c) => c.command === "packman.openSocketSettings",
+      ),
+    );
+  });
+
+  it("contributes refresh enrichment command in the editor title", () => {
+    assert.ok(
+      manifest.contributes.commands.some(
+        (c) => c.command === "packman.refreshEnrichment",
+      ),
+    );
+    assert.ok(
+      manifest.contributes.menus["editor/title"].some(
+        (m) => m.command === "packman.refreshEnrichment",
+      ),
+    );
+  });
 });
