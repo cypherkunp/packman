@@ -64,7 +64,7 @@ export function registerOverlay(
       readOnly: isReadOnly(document),
       enrichment: known,
       socketConfigured: socketCredentials().status === "ready",
-      githubPaused: pausedUntil !== undefined,
+      githubPaused: isGithubPaused(),
       github,
       githubPausedUntil:
         pausedUntil !== undefined

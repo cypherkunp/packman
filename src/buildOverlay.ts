@@ -4,7 +4,10 @@ import {
   type Node as JsonNode,
 } from "jsonc-parser";
 import { dependencyStatus, nonRegistrySource } from "./dependencyStatus";
-import type { CellDegrade, EnrichedDependencyRow } from "./enrichDependencyRow";
+import type {
+  CellDegrade,
+  EnrichedDependencyRow,
+} from "./enrichDependencyRow";
 import { npmPackageUrl } from "./fetchNpmLatest";
 import { DEPENDENCY_BAGS, type DependencyRow } from "./packageViewModel";
 
@@ -27,7 +30,11 @@ export type OverlayLens = {
 };
 
 export type OverlayDecorationTone =
-  "outdated" | "latest" | "risk" | "pending" | "degraded";
+  | "outdated"
+  | "latest"
+  | "risk"
+  | "pending"
+  | "degraded";
 
 export type OverlayDecoration = {
   range: OverlayRange;
@@ -186,7 +193,10 @@ function blockSummaryLenses(
       const latest = context.enrichment?.get(dependency.name)?.latest;
       return dependencyStatus(dependency.range, latest).kind === "behind";
     }).length;
-    const segments = [plural(entries.length, "dep"), `${outdated} outdated`];
+    const segments = [
+      plural(entries.length, "dep"),
+      `${outdated} outdated`,
+    ];
     if (context.socketConfigured) {
       const alerts = inBlock.filter((dependency) => {
         const socket = context.enrichment?.get(dependency.name)?.socket;
