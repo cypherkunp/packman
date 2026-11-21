@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **`package.json` now opens in the normal text editor by default.** UI mode is still there, but opt-in: open it with the eye icon in the editor title bar, `Cmd/Ctrl+Shift+M`, or Reopen Editor With… → Packman. If you prefer UI mode as before, set it as the default with Reopen Editor With… → Configure default editor for `package.json`.
+- New Overlay in the text editor: a ▶ Run action above each script, and a "Trust workspace to run scripts" action instead in untrusted workspaces. Turn it off with `packman.overlay.enabled`, or hide it for the session with Packman: Toggle Overlay.
+- "Packman: Open Edit Mode" is now **Packman: Open in Text Editor**, and UI mode's Edit mode button is now **Text editor**.
+
 ## 0.0.4
 
 - UI mode header shows the package `name@version`, with Edit mode (and its shortcut) and Refresh buttons.

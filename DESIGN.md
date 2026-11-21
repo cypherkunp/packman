@@ -67,7 +67,7 @@ components:
 
 Packman is a tool, not a page. UI mode should read as something that shipped with VS Code: it takes its colors, fonts and focus behavior from the host and adds none of its own. Nothing here has a fixed hex value; every color is a `--vscode-*` token, so the same markup is correct in any light, dark or high-contrast theme, in VS Code and in Cursor.
 
-The density is that of an editor panel: a single left-aligned column up to 60rem, headed by the package's own `name@version` with Refresh and Edit mode beside it, small uppercase section labels, key/value pairs and tables that read like the file they summarize. Hierarchy comes from weight, case and the theme's muted foreground, not from size jumps or ornament. The one place the system lets itself be more present is the Script button, which is built to be pressed and answers the press.
+The density is that of an editor panel: a single left-aligned column up to 60rem, headed by the package's own `name@version` with Refresh and Text editor beside it, small uppercase section labels, key/value pairs and tables that read like the file they summarize. Hierarchy comes from weight, case and the theme's muted foreground, not from size jumps or ornament. The one place the system lets itself be more present is the Script button, which is built to be pressed and answers the press.
 
 **Key Characteristics:**
 - No colors, fonts or icons of its own: theme tokens only.
@@ -76,7 +76,7 @@ The density is that of an editor panel: a single left-aligned column up to 60rem
 - Flat at rest; structure from 1px theme borders, never shadows.
 - Script buttons are tactile: they have a visible hover, a pressed state and a focus ring.
 - Missing data is stated plainly (muted, warning, or error tokens), never guessed.
-- Dependency rows give a verdict in words (`major`, `alerts`, "2 need attention"), not raw numbers alone.
+- Dependencies give a verdict in words (`major`, `alerts`, "2 need attention"), not raw numbers alone.
 
 ## Colors
 
@@ -101,7 +101,7 @@ A role-mapped palette with no literal values. Each role is a VS Code token, with
 - **Error Red** (`--vscode-errorForeground`): parse-error detail and the Socket `alerts` label. Reserved for real risk; fetch failures are muted words, not red.
 - **Warning Ink** (`--vscode-editorWarning-foreground`): the `major` (breaking) label and the "need attention" count.
 - **Warning Surface** (`--vscode-inputValidation-warningBackground` / `-warningBorder` / `-warningForeground`): the rate-limit notice.
-- **Keybinding Label** (`--vscode-keybindingLabel-*`): the `<kbd>` shortcut next to Edit mode.
+- **Keybinding Label** (`--vscode-keybindingLabel-*`): the `<kbd>` shortcut next to Text editor.
 
 ### Syntax (JSON blocks)
 Keys use `--vscode-symbolIcon-keyForeground`, strings `--vscode-debugTokenExpression-string`, numbers `--vscode-debugTokenExpression-number`, booleans `--vscode-debugTokenExpression-boolean`, null `--vscode-symbolIcon-nullForeground`. These match the editor's own highlighting by construction.
@@ -159,7 +159,7 @@ Tactile and confident: a full-width row that reads as a button.
 - **Started:** for 1.5s after a click the command is replaced by "Started in terminal", the border takes the focus color, further clicks are ignored (no double runs), and a polite live region announces it.
 
 ### Masthead
-`h1` is `name@version` (version muted). Right of it, two compact secondary buttons (`0.25rem 0.65rem`, 4px radius): **Refresh** (only when there are dependencies) and **Edit mode** with the platform keybinding in a `<kbd>`. Below: the description (max 70ch) and a `role="status"` line that reads "Fetching registry, GitHub and Socket data…" while enrichment runs.
+`h1` is `name@version` (version muted). Right of it, two compact secondary buttons (`0.25rem 0.65rem`, 4px radius): **Refresh** (only when there are dependencies) and **Text editor** with the platform keybinding in a `<kbd>`. Below: the description (max 70ch) and a `role="status"` line that reads "Fetching registry, GitHub and Socket data…" while enrichment runs.
 
 ### Key/Value List
 `dl` as a grid. Keys in muted foreground; values in the editor font, left-aligned. Small flat objects of strings (e.g. `engines`) render inline as muted key + value pairs instead of a code block.
@@ -179,7 +179,7 @@ Bordered wrapper with 4px radius, a visually hidden `<caption>`, `scope="col"` h
 A warning-tinted block (`0.55rem 0.75rem`, 4px radius, warning border, background and foreground, max 70ch) placed above the first dependency table, never above Scripts. Used for a paused GitHub rate limit: what is paused, until when, what still works, how to fix it.
 
 ### Problem State
-When package.json can't be parsed: an `h1` "package.json can’t be shown", one plain sentence, the parser detail in error red with the line and column, and an **Open in Edit mode at line N, column M** button that opens the text editor with the caret there.
+When package.json can't be parsed: an `h1` "package.json can’t be shown", one plain sentence, the parser detail in error red with the line and column, and an **Open in the text editor at line N, column M** button that opens the text editor with the caret there.
 
 ## Do's and Don'ts
 
@@ -195,7 +195,7 @@ When package.json can't be parsed: an `h1` "package.json can’t be shown", one 
 ### Don't:
 - **Don't** introduce a brand color, a custom typeface, an icon font or an image asset.
 - **Don't** add shadows, gradients, glows or rounded pills.
-- **Don't** make UI mode editable; edits belong in Edit mode.
+- **Don't** make UI mode editable; edits belong in the text editor.
 - **Don't** convey status by color alone, and don't dim text with `opacity`.
 - **Don't** let the page scroll horizontally; scroll wide content inside its own wrapper.
 - **Don't** make UI mode look like a webpage in the editor: no hero areas, no marketing type scale, no centered layouts.

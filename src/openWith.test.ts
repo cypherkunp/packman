@@ -10,7 +10,7 @@ describe("resolveOpenWithViewId", () => {
     );
   });
 
-  it("targets Packman UI mode when Edit mode (or another editor) is active", () => {
+  it("targets Packman UI mode when the text editor (or another editor) is active", () => {
     assert.equal(resolveOpenWithViewId(undefined), PACKMAN_VIEW_TYPE);
     assert.equal(resolveOpenWithViewId(""), PACKMAN_VIEW_TYPE);
     assert.equal(resolveOpenWithViewId("some.other.editor"), PACKMAN_VIEW_TYPE);

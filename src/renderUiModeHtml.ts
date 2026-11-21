@@ -18,7 +18,7 @@ export type UiModeExtras = {
   githubResetLabel?: string;
   /** True while registry / GitHub / Socket data is being fetched. */
   loading?: boolean;
-  /** Keybinding label for Edit mode, e.g. "⌘⇧M" or "Ctrl+Shift+M". */
+  /** Keybinding label for opening the text editor, e.g. "⌘⇧M" or "Ctrl+Shift+M". */
   editShortcut?: string;
 };
 
@@ -653,7 +653,7 @@ function masthead(
   return `<header class="masthead">
   <div class="title-row">
     <h1>${escapeHtml(title)}${versionHtml}</h1>
-    <div class="actions">${refresh}<button type="button" class="action" data-action="edit" data-key="action-edit" title="Open package.json in the text editor">Edit mode${shortcut}</button></div>
+    <div class="actions">${refresh}<button type="button" class="action" data-action="edit" data-key="action-edit" title="Open package.json in the text editor">Text editor${shortcut}</button></div>
   </div>
   ${description ? `<p class="description">${escapeHtml(description)}</p>` : ""}
   <p class="status" id="live-status" role="status" aria-live="polite">${status}</p>
@@ -684,9 +684,9 @@ function errorBody(
     : "";
   return `<section class="problem">
   <h1>package.json can’t be shown</h1>
-  <p>${isSyntax ? "The file isn’t valid JSON" : "The file isn’t a package manifest"}, so UI mode can’t read it. Fix it in Edit mode; this view updates as soon as the file is valid.</p>
+  <p>${isSyntax ? "The file isn’t valid JSON" : "The file isn’t a package manifest"}, so UI mode can’t read it. Fix it in the text editor; this view updates as soon as the file is valid.</p>
   <p class="detail">${escapeHtml(detail)}${escapeHtml(where)}</p>
-  <p><button type="button" class="action" data-action="edit" data-key="action-edit"${lineAttrs}>Open in Edit mode${escapeHtml(where)}${shortcut}</button></p>
+  <p><button type="button" class="action" data-action="edit" data-key="action-edit"${lineAttrs}>Open in the text editor${escapeHtml(where)}${shortcut}</button></p>
   <p class="status" id="live-status" role="status" aria-live="polite"></p>
 </section>`;
 }
@@ -766,7 +766,7 @@ function packageBody(
 
   if (!hasDependencies && model.scripts.length === 0) {
     parts.push(
-      `<p class="empty">No scripts or dependencies yet. Add them in Edit mode and they appear here.</p>`,
+      `<p class="empty">No scripts or dependencies yet. Add them in the text editor and they appear here.</p>`,
     );
   }
 
