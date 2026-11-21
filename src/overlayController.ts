@@ -10,6 +10,7 @@ import {
   type OverlayDecorationTone,
   type OverlayRange,
 } from "./buildOverlay";
+import { sharedGithubBudget } from "./githubBudget";
 import { isOverlayTarget } from "./overlayTarget";
 import {
   enrichmentCache,
@@ -22,6 +23,8 @@ import { resolveSocketCredentials } from "./socketCredentials";
 const OVERLAY_SETTING = "packman.overlay.enabled";
 const SOCKET_SETTINGS = "packman.socket";
 const REFRESH_DEBOUNCE_MS = 300;
+/** How often block summaries re-check whether GitHub is paused. */
+const GITHUB_PAUSE_POLL_MS = 15_000;
 /** Schemes whose documents can be edited and whose scripts can be run. */
 const EDITABLE_SCHEMES = new Set(["file", "untitled", "vscode-remote"]);
 
@@ -46,7 +49,27 @@ export function registerOverlay(
     trusted: vscode.workspace.isTrusted,
     readOnly: isReadOnly(document),
     enrichment: known,
+    socketConfigured: socketCredentials().status === "ready",
+    githubPaused: isGithubPaused(),
   });
+
+  const socketCredentials = () => {
+    const config = vscode.workspace.getConfiguration("packman");
+    return resolveSocketCredentials(
+      config.get<string>("socket.apiToken"),
+      config.get<string>("socket.orgSlug"),
+    );
+  };
+
+  /** Re-render summaries when the GitHub budget blocks or resumes. */
+  let githubPaused = isGithubPaused();
+  const githubPauseWatch = setInterval(() => {
+    const paused = isGithubPaused();
+    if (paused !== githubPaused) {
+      githubPaused = paused;
+      changed.fire();
+    }
+  }, GITHUB_PAUSE_POLL_MS);
 
   /** Eager enrichment per Dependency name, degraded results included. */
   const known = new Map<string, DependencyEnrichment>();
@@ -93,15 +116,8 @@ export function registerOverlay(
       requested.add(row.name);
     }
     const signal = enrichAbort.signal;
-    const config = vscode.workspace.getConfiguration("packman");
     void enrichmentStore
-      .enrichEager(rows, {
-        signal,
-        socket: resolveSocketCredentials(
-          config.get<string>("socket.apiToken"),
-          config.get<string>("socket.orgSlug"),
-        ),
-      })
+      .enrichEager(rows, { signal, socket: socketCredentials() })
       .then((enriched) => {
         if (signal.aborted) {
           return;
@@ -114,6 +130,7 @@ export function registerOverlay(
           }
         }
         renderDecorations();
+        changed.fire();
       })
       .catch(() => {
         for (const row of rows) {
@@ -128,6 +145,7 @@ export function registerOverlay(
     enrichAbort = new AbortController();
     known.clear();
     requested.clear();
+    changed.fire();
     renderDecorations();
     enrichNewDependencies();
   };
@@ -168,6 +186,7 @@ export function registerOverlay(
     changed,
     { dispose: () => debounce && clearTimeout(debounce) },
     { dispose: () => enrichAbort.abort() },
+    { dispose: () => clearInterval(githubPauseWatch) },
     ...decorationTypes.values(),
     vscode.window.onDidChangeVisibleTextEditors(refresh),
     enrichmentRefreshEmitter.event(() => {
@@ -235,6 +254,10 @@ export function registerOverlay(
       },
     ),
   );
+}
+
+function isGithubPaused(): boolean {
+  return sharedGithubBudget.blockedUntilMs() !== undefined;
 }
 
 const TONE_COLORS: Record<OverlayDecorationTone, string> = {
