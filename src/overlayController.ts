@@ -14,6 +14,7 @@ import {
   type OverlayDecorationTone,
   type OverlayRange,
 } from "./buildOverlay";
+import { githubPart } from "./enrichDependencyRow";
 import { formatGithubResetClock, sharedGithubBudget } from "./githubBudget";
 import { shouldFetchGithubOnHover } from "./githubOnHover";
 import { GithubPauseWatch } from "./githubPauseWatch";
@@ -233,13 +234,7 @@ export function registerOverlay(): vscode.Disposable {
     if (signal.aborted) {
       return;
     }
-    github.set(name, {
-      githubUrl: enriched.githubUrl,
-      issuesUrl: enriched.issuesUrl,
-      openIssuesCount: enriched.openIssuesCount,
-      githubDegrade: enriched.githubDegrade,
-      issuesDegrade: enriched.issuesDegrade,
-    });
+    github.set(name, githubPart(enriched));
     if (!known.has(name) && (enriched.latest || enriched.latestDegrade)) {
       known.set(name, enriched);
       renderDecorations();

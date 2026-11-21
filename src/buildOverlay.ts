@@ -2,6 +2,7 @@ import { findNodeAtLocation, type Node as JsonNode } from "jsonc-parser";
 import { dependencyStatus, nonRegistrySource } from "./dependencyStatus";
 import type {
   CellDegrade,
+  DependencyGithub,
   EnrichedDependencyRow,
 } from "./enrichDependencyRow";
 import { npmPackageUrl } from "./fetchNpmLatest";
@@ -86,14 +87,7 @@ export type OverlayContext = {
 };
 
 /** The GitHub-only enrichment a Dependency hover reads. */
-export type DependencyGithub = Pick<
-  EnrichedDependencyRow,
-  | "githubUrl"
-  | "issuesUrl"
-  | "openIssuesCount"
-  | "githubDegrade"
-  | "issuesDegrade"
->;
+export type { DependencyGithub };
 
 /** The eager enrichment a Dependency decoration reads. */
 export type DependencyEnrichment = Pick<

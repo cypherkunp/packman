@@ -1,6 +1,7 @@
 import {
   enrichDependencyEager,
   enrichDependencyGithub,
+  githubPart,
   type EnrichedDependencyRow,
 } from "./enrichDependencyRow";
 import type { EnrichmentCache } from "./enrichmentCache";
@@ -145,12 +146,7 @@ export class EnrichmentStore {
     const degraded = enriched.githubDegrade || enriched.issuesDegrade;
     const stored = this.entries.get(row.name);
     if (!degraded && stored && !options.signal?.aborted) {
-      this.entries.set(row.name, {
-        ...stored,
-        githubUrl: enriched.githubUrl,
-        issuesUrl: enriched.issuesUrl,
-        openIssuesCount: enriched.openIssuesCount,
-      });
+      this.entries.set(row.name, { ...stored, ...githubPart(enriched) });
       this.githubLoaded.add(row.name);
     }
     return enriched;

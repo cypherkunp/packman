@@ -29,6 +29,35 @@ export type EnrichedDependencyRow = DependencyRow & {
   issuesDegrade?: CellDegrade;
 };
 
+/** The GitHub-only part of a Dependency's enrichment. */
+export type DependencyGithub = Pick<
+  EnrichedDependencyRow,
+  | "githubUrl"
+  | "issuesUrl"
+  | "openIssuesCount"
+  | "githubDegrade"
+  | "issuesDegrade"
+>;
+
+const GITHUB_FIELDS = [
+  "githubUrl",
+  "issuesUrl",
+  "openIssuesCount",
+  "githubDegrade",
+  "issuesDegrade",
+] as const satisfies readonly (keyof DependencyGithub)[];
+
+/** The GitHub fields a row has set, and no others. */
+export function githubPart(row: DependencyGithub): DependencyGithub {
+  const part: Record<string, unknown> = {};
+  for (const field of GITHUB_FIELDS) {
+    if (row[field] !== undefined) {
+      part[field] = row[field];
+    }
+  }
+  return part as DependencyGithub;
+}
+
 export type EnrichmentOptions = {
   githubToken?: string;
   fetchImpl?: FetchLike;

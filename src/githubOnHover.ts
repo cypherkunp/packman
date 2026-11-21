@@ -1,4 +1,4 @@
-import type { DependencyGithub } from "./buildOverlay";
+import type { DependencyGithub } from "./enrichDependencyRow";
 
 /**
  * Whether a hover should fetch a Dependency's GitHub data, given what the
