@@ -6,7 +6,7 @@
 
 web
 
-(UI mode is an HTML webview inside the VS Code / Cursor custom editor, not a standalone site.)
+(The Overlay uses native editor surfaces — CodeLens, decorations, hovers. UI mode is an HTML webview inside the VS Code / Cursor custom editor, not a standalone site.)
 
 ## Users
 
@@ -14,31 +14,32 @@ The primary user is the everyday JS/TS app developer working in their own repo i
 
 ## Product Purpose
 
-Packman opens `package.json` in **UI mode** by default: a native-feeling, read-oriented view of the file with **Script buttons** that run in a terminal and **Dependency rows** enriched with latest version, GitHub repo / open issues, and Socket.dev risk. **Edit mode** (the native text editor) is one button or keybinding away. Success means the developer runs a script or answers "is this dependency OK?" without leaving the editor or reading raw JSON.
+Packman adds script runners and dependency intelligence right inside `package.json`. The file opens in the native text editor by default, carrying the **Overlay**: **Script buttons** as CodeLenses that run in a terminal, and signals on each **Dependency** (latest version, GitHub repo / open issues, Socket.dev risk). **UI mode**, a native-feeling, read-oriented view of the whole file, is one button or keybinding away for developers who want it. Success means the developer runs a script or answers "is this dependency OK?" without leaving the file they're editing.
 
 ## Positioning
 
-The pairing is the point: a whole-file overview of `package.json`, with every dependency signal in one place, that feels like part of VS Code rather than a webpage embedded in it. Single-purpose extensions do one half (inline version lenses, script tree views); Packman replaces the default `package.json` experience while staying one keystroke from the text.
+The pairing is the point: a whole-file overview of `package.json`, with every dependency signal in one place, that feels like part of VS Code rather than a webpage embedded in it. Single-purpose extensions do one half (inline version lenses, script tree views); Packman puts both into the default `package.json` text editor, with UI mode one keystroke away for a whole-file read.
 
 ## Operating Context
 
 - Hosts: VS Code and Cursor (same custom-editor API; published to Marketplace and Open VSX).
-- Opens by default for `**/package.json` via `CustomTextEditorProvider`; toggles to Edit mode with `Cmd/Ctrl+Shift+M` or the editor title button.
+- `**/package.json` opens in the native text editor with the Overlay (CodeLens, decorations, hovers). UI mode is a `CustomTextEditorProvider` contributed at `option` priority; `Cmd/Ctrl+Shift+M` or the editor title buttons toggle between the two in both directions.
 - Script buttons run `<pm> run <script>` using the package manager detected from the lockfile (pnpm / yarn / bun, else npm), with cwd = the package.json folder, in a reused `Packman: <folder>` terminal.
 - Enrichment comes from the npm registry, the GitHub REST API (unauthenticated 60/hr, or a token / signed-in GitHub account for 5,000/hr), and Socket.dev (end-user org token + org slug only).
 - Users work in any VS Code theme: light, dark, high contrast.
 
 ## Capabilities and Constraints
 
-- First-class fields: name, version, description, license, engines, scripts, `dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`, and `overrides` / `resolutions` (shown as **Override entries**, separate from Dependency rows, not enriched). Everything else renders generically.
+- First-class fields: name, version, description, license, engines, scripts, `dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`, and `overrides` / `resolutions` (shown as **Override entries**, separate from Dependencies, not enriched). Everything else renders generically.
 - Dependency columns: name, range, latest, GitHub, open issues (count covers issues + PRs, noted in a tooltip), Socket.
 - Socket column shows a call to action until the user configures a token; richer or redistributable Socket integration is deferred (#16).
 - Rate limits, missing tokens and fetch failures degrade gracefully (e.g. GitHub issue counts pause and show when they resume).
-- **UI mode is read-oriented.** It does not edit the JSON; all edits happen in Edit mode.
+- **Packman never writes the JSON.** Neither the Overlay nor UI mode edits `package.json`; every change is one the developer types in the text editor.
 - **Styling uses VS Code theme tokens only.** Colors and fonts come from `--vscode-*` variables (and codicons); there is no brand palette or custom typeface. Must hold up in light, dark and high-contrast themes.
 - Webview runs under a strict nonce-based CSP (`default-src 'none'`).
-- Not yet specified: Workspace Trust / script-execution policy, private registries, `workspace:` / `catalog:` protocol display, Marketplace listing copy.
-- Terminology is defined in `CONTEXT.md` (Packman, UI mode, Edit mode, Script button, Dependency row, Override entry); use those terms in UI copy and code.
+- Workspace Trust: untrusted workspaces get a single "Trust workspace to run scripts" action instead of Run actions; read-only and diff views get no Run actions.
+- Not yet specified: private registries, `workspace:` / `catalog:` protocol display, Marketplace listing copy.
+- Terminology is defined in `CONTEXT.md` (Packman, Overlay, UI mode, Script button, Dependency, Override entry); use those terms in UI copy and code.
 
 ## Brand Commitments
 
@@ -54,12 +55,12 @@ The pairing is the point: a whole-file overview of `package.json`, with every de
 ## Product Principles
 
 1. **Feels native.** If it looks like a webpage dropped into the editor, it's wrong. Follow VS Code's layout, density, controls and keyboard conventions.
-2. **Fast in, fast out.** The common job is "run a script" or "glance at deps"; those must be immediate, and the text is always one keystroke away.
-3. **Signals live next to their dependency.** Every piece of enrichment sits on its Dependency row, so the developer never has to open a browser tab to judge a package.
-4. **Read here, edit there.** UI mode presents and acts (runs scripts, opens links); it never edits the JSON.
+2. **Fast in, fast out.** The common job is "run a script" or "glance at deps"; those must be immediate, and the text editor is the default and UI mode is one keystroke away.
+3. **Signals live next to their dependency.** Every piece of enrichment sits on its Dependency, so the developer never has to open a browser tab to judge a package.
+4. **Never write for the user.** The Overlay and UI mode present and act (run scripts, open links); they never edit the JSON.
 
 ## Accessibility & Inclusion
 
 - Everything in UI mode is reachable and operable by keyboard, with a visible focus state from the theme's `focusBorder`.
-- Script buttons, Dependency row columns and status/empty states have meaningful screen-reader labels (no icon-only controls without names).
+- Script buttons, Dependency columns and status/empty states have meaningful screen-reader labels (no icon-only controls without names).
 - Must remain legible in VS Code high-contrast themes; never rely on color alone for status.
