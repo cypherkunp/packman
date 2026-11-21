@@ -3,6 +3,12 @@ import {
   parseTree,
   type Node as JsonNode,
 } from "jsonc-parser";
+import { dependencyStatus, nonRegistrySource } from "./dependencyStatus";
+import type {
+  CellDegrade,
+  EnrichedDependencyRow,
+} from "./enrichDependencyRow";
+import { DEPENDENCY_BAGS, type DependencyRow } from "./packageViewModel";
 
 /**
  * Pure Overlay builder: turns `package.json` text plus a context into plain
@@ -22,7 +28,12 @@ export type OverlayLens = {
   tooltip?: string;
 };
 
-export type OverlayDecorationTone = "outdated" | "latest" | "risk" | "pending";
+export type OverlayDecorationTone =
+  | "outdated"
+  | "latest"
+  | "risk"
+  | "pending"
+  | "degraded";
 
 export type OverlayDecoration = {
   range: OverlayRange;
@@ -51,7 +62,18 @@ export type OverlayContext = {
   trusted: boolean;
   /** Read-only or diff contexts get no script lenses. */
   readOnly: boolean;
+  /**
+   * Eager enrichment known per Dependency name. A name with no entry is
+   * still loading and shows the pending marker.
+   */
+  enrichment?: ReadonlyMap<string, DependencyEnrichment>;
 };
+
+/** The eager enrichment a Dependency decoration reads. */
+export type DependencyEnrichment = Pick<
+  EnrichedDependencyRow,
+  "latest" | "latestDegrade" | "socket"
+>;
 
 export const RUN_SCRIPT_COMMAND = "packman.runScript";
 export const MANAGE_TRUST_COMMAND = "workbench.trust.manage";
@@ -71,7 +93,105 @@ export function buildOverlay(text: string, context: OverlayContext): Overlay {
   }
   const toRange = rangeMapper(text);
   overlay.lenses.push(...scriptLenses(root, context, toRange));
+  overlay.decorations.push(...dependencyDecorations(root, context, toRange));
   return overlay;
+}
+
+type DependencyNode = DependencyRow & { property: JsonNode };
+
+/**
+ * The registry Dependencies in a `package.json` text, as the Overlay sees
+ * them: what the adapter feeds to eager enrichment.
+ */
+export function overlayDependencies(text: string): DependencyRow[] {
+  const root = parseTree(text);
+  if (!root || root.type !== "object") {
+    return [];
+  }
+  return dependencyNodes(root).map(({ name, range }) => ({ name, range }));
+}
+
+function dependencyNodes(root: JsonNode): DependencyNode[] {
+  return DEPENDENCY_BAGS.flatMap((bag) => {
+    const block = findNodeAtLocation(root, [bag]);
+    if (!block || block.type !== "object") {
+      return [];
+    }
+    return (block.children ?? []).flatMap((property) => {
+      const key = property.children?.[0];
+      const value = property.children?.[1];
+      if (
+        property.type !== "property" ||
+        typeof key?.value !== "string" ||
+        value?.type !== "string" ||
+        nonRegistrySource(value.value as string)
+      ) {
+        return [];
+      }
+      return [{ name: key.value, range: value.value as string, property }];
+    });
+  });
+}
+
+function dependencyDecorations(
+  root: JsonNode,
+  context: OverlayContext,
+  toRange: (node: JsonNode) => OverlayRange,
+): OverlayDecoration[] {
+  return dependencyNodes(root).flatMap((dependency) => {
+    const known = context.enrichment?.get(dependency.name);
+    const signal = withSocketScore(
+      dependencySignal(dependency.range, known),
+      known,
+    );
+    return signal ? [{ range: toRange(dependency.property), ...signal }] : [];
+  });
+}
+
+const DEGRADE_LABEL: Record<CellDegrade, string> = {
+  offline: "offline",
+  rate_limited: "rate-limited",
+  timeout: "timed out",
+};
+
+type DependencySignal = { text: string; tone: OverlayDecorationTone };
+
+function withSocketScore(
+  signal: DependencySignal | undefined,
+  known: DependencyEnrichment | undefined,
+): DependencySignal | undefined {
+  const socket = known?.socket;
+  if (socket?.kind !== "score") {
+    return signal;
+  }
+  const score = `Socket ${socket.overall100}`;
+  return {
+    text: signal ? `${signal.text} · ${score}` : score,
+    tone: socket.highSeverity ? "risk" : (signal?.tone ?? "latest"),
+  };
+}
+
+function dependencySignal(
+  range: string,
+  known: DependencyEnrichment | undefined,
+): DependencySignal | undefined {
+  if (!known) {
+    return { text: "…", tone: "pending" };
+  }
+  if (!known.latest && known.latestDegrade) {
+    return {
+      text: `⚠ npm ${DEGRADE_LABEL[known.latestDegrade]}`,
+      tone: "degraded",
+    };
+  }
+  const status = dependencyStatus(range, known.latest);
+  if (status.kind === "behind" && known.latest) {
+    return { text: `→ ${known.latest}`, tone: "outdated" };
+  }
+  if (status.kind === "current") {
+    return { text: "✓ latest", tone: "latest" };
+  }
+  return undefined;
 }
 
 function scriptLenses(

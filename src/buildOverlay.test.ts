@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildOverlay, type OverlayContext } from "./buildOverlay";
+import {
+  buildOverlay,
+  overlayDependencies,
+  type DependencyEnrichment,
+  type OverlayContext,
+} from "./buildOverlay";
 
 const DOC = "file:///work/app/package.json";
 
@@ -139,5 +144,268 @@ describe("buildOverlay", () => {
         [3, "test"],
       ],
     );
+  });
+
+  describe("Dependency decorations", () => {
+    const DEPS = `{
+  "name": "demo",
+  "version": "1.0.0",
+  "dependencies": {
+    "leftpad": "^1.0.0",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.3.0"
+  }
+}`;
+
+    const decorated = (
+      text: string,
+      enrichment: Record<string, DependencyEnrichment>,
+      overrides: Partial<OverlayContext> = {},
+    ) =>
+      buildOverlay(
+        text,
+        ctx({ enrichment: new Map(Object.entries(enrichment)), ...overrides }),
+      ).decorations.map((d) => ({
+        line: d.range.start.line,
+        text: d.text,
+        tone: d.tone,
+      }));
+
+    it("shows → latest on an outdated Dependency", () => {
+      assert.deepEqual(
+        decorated(DEPS, {
+          leftpad: { latest: "2.1.0" },
+          react: { latest: "19.0.0" },
+          typescript: { latest: "5.6.2" },
+        }),
+        [
+          { line: 4, text: "→ 2.1.0", tone: "outdated" },
+          { line: 5, text: "→ 19.0.0", tone: "outdated" },
+          { line: 8, text: "→ 5.6.2", tone: "outdated" },
+        ],
+      );
+    });
+
+    it("shows a quiet latest marker when the range already allows latest", () => {
+      assert.deepEqual(
+        decorated(DEPS, {
+          leftpad: { latest: "1.3.0" },
+          react: { latest: "18.3.1" },
+          typescript: { latest: "5.3.3" },
+        }).map((d) => [d.line, d.text, d.tone]),
+        [
+          [4, "✓ latest", "latest"],
+          [5, "✓ latest", "latest"],
+          [8, "✓ latest", "latest"],
+        ],
+      );
+    });
+
+    it("shows a pending marker while a Dependency's enrichment is loading", () => {
+      assert.deepEqual(
+        decorated(DEPS, { react: { latest: "18.3.1" } }).map((d) => [
+          d.line,
+          d.text,
+          d.tone,
+        ]),
+        [
+          [4, "…", "pending"],
+          [5, "✓ latest", "latest"],
+          [8, "…", "pending"],
+        ],
+      );
+    });
+
+    it("shows a degraded marker when the registry lookup failed", () => {
+      assert.deepEqual(
+        decorated(DEPS, {
+          leftpad: { latestDegrade: "offline" },
+          react: { latestDegrade: "rate_limited" },
+          typescript: { latestDegrade: "timeout" },
+        }).map((d) => [d.line, d.text, d.tone]),
+        [
+          [4, "⚠ npm offline", "degraded"],
+          [5, "⚠ npm rate-limited", "degraded"],
+          [8, "⚠ npm timed out", "degraded"],
+        ],
+      );
+    });
+
+    it("keeps the version signal when a degraded lookup still has a cached latest", () => {
+      assert.deepEqual(
+        decorated(DEPS, {
+          leftpad: { latest: "2.0.0", latestDegrade: "rate_limited" },
+          react: { latest: "18.3.1" },
+          typescript: { latest: "5.3.3" },
+        }).map((d) => [d.line, d.text]),
+        [
+          [4, "→ 2.0.0"],
+          [5, "✓ latest"],
+          [8, "✓ latest"],
+        ],
+      );
+    });
+
+    it("adds the Socket score when Socket is configured, flagging risk", () => {
+      const score = (overall100: number, highSeverity = false) => ({
+        kind: "score" as const,
+        overall100,
+        highSeverity,
+        url: "https://socket.dev/npm/package/x",
+      });
+      assert.deepEqual(
+        decorated(DEPS, {
+          leftpad: { latest: "2.1.0", socket: score(87) },
+          react: { latest: "18.3.1", socket: score(42, true) },
+          typescript: { latest: "5.3.3", socket: { kind: "empty" } },
+        }),
+        [
+          { line: 4, text: "→ 2.1.0 · Socket 87", tone: "outdated" },
+          { line: 5, text: "✓ latest · Socket 42", tone: "risk" },
+          { line: 8, text: "✓ latest", tone: "latest" },
+        ],
+      );
+    });
+
+    it("never nags on the line when Socket isn't configured", () => {
+      assert.deepEqual(
+        decorated(DEPS, {
+          leftpad: { latest: "1.0.0", socket: { kind: "cta" } },
+          react: { latest: "18.3.1", socket: { kind: "cta" } },
+          typescript: { latest: "5.3.3", socket: { kind: "cta" } },
+        }).map((d) => d.text),
+        ["✓ latest", "✓ latest", "✓ latest"],
+      );
+    });
+
+    it("decorates only Dependencies, never Override entries or other fields", () => {
+      const text = `{
+  "name": "leftpad",
+  "version": "1.0.0",
+  "engines": { "node": ">=18" },
+  "scripts": { "leftpad": "echo" },
+  "overrides": { "leftpad": "1.0.0" },
+  "resolutions": { "leftpad": "1.0.0" },
+  "peerDependencies": { "leftpad": "^1.0.0" },
+  "optionalDependencies": { "fsevents": "^2.0.0" },
+  "config": { "dependencies": { "leftpad": "^1.0.0" } }
+}`;
+      assert.deepEqual(
+        decorated(text, {
+          leftpad: { latest: "1.0.0" },
+          node: { latest: "22.0.0" },
+        }).map((d) => [d.line, d.text]),
+        [
+          [7, "✓ latest"],
+          [8, "…"],
+        ],
+      );
+    });
+
+    it("gives non-registry Dependencies no version note, even while loading", () => {
+      const text = `{
+  "dependencies": {
+    "@acme/ui": "workspace:*",
+    "local": "file:../local",
+    "fork": "github:me/fork"
+  }
+}`;
+      assert.deepEqual(decorated(text, {}), []);
+      assert.deepEqual(
+        decorated(text, { "@acme/ui": { latest: "9.9.9" } }),
+        [],
+      );
+    });
+
+    const KNOWN = {
+      leftpad: { latest: "2.1.0" },
+      react: { latest: "18.3.1" },
+      typescript: { latest: "5.3.3" },
+    };
+
+    it("follows Dependencies when entries are inserted, removed or reordered", () => {
+      const edited = `{
+  "dependencies": {
+    "react": "^18.2.0",
+
+    "zod": "^3.0.0",
+    "leftpad": "^1.0.0"
+  }
+}`;
+      assert.deepEqual(
+        decorated(edited, KNOWN).map((d) => [d.line, d.text]),
+        [
+          [2, "✓ latest"],
+          [4, "…"],
+          [5, "→ 2.1.0"],
+        ],
+      );
+    });
+
+    it("re-reads the range from the text, so a changed range needs no new enrichment", () => {
+      const bumped = DEPS.replace('"leftpad": "^1.0.0"', '"leftpad": "^2.0.0"');
+      assert.deepEqual(
+        decorated(bumped, KNOWN).map((d) => [d.line, d.text]),
+        [
+          [4, "✓ latest"],
+          [5, "✓ latest"],
+          [8, "✓ latest"],
+        ],
+      );
+    });
+
+    it("anchors each Dependency on a one-line block, character-accurate", () => {
+      const text = `{ "dependencies": { "react": "^18.2.0", "leftpad": "^1.0.0" } }`;
+      const ranges = buildOverlay(
+        text,
+        ctx({ enrichment: new Map(Object.entries(KNOWN)) }),
+      ).decorations.map((d) => d.range);
+      assert.deepEqual(ranges, [
+        { start: { line: 0, character: 20 }, end: { line: 0, character: 38 } },
+        { start: { line: 0, character: 40 }, end: { line: 0, character: 59 } },
+      ]);
+    });
+
+    it("keeps decorations while the JSON is mid-edit", () => {
+      const broken = `{
+  "dependencies": {
+    "react": "^18.2.0",
+    "leftpad": "^1.0.0",
+  },
+  "name":
+}`;
+      assert.deepEqual(
+        decorated(broken, KNOWN).map((d) => [d.line, d.text]),
+        [
+          [2, "✓ latest"],
+          [3, "→ 2.1.0"],
+        ],
+      );
+    });
+
+    it("still decorates read-only and diff views; the disabled Overlay shows none", () => {
+      assert.equal(decorated(DEPS, KNOWN, { readOnly: true }).length, 3);
+      assert.equal(
+        decorated(DEPS, KNOWN, { readOnly: true, trusted: false }).length,
+        3,
+      );
+      assert.deepEqual(decorated(DEPS, KNOWN, { enabled: false }), []);
+    });
+
+    it("lists the registry Dependencies the adapter should enrich", () => {
+      const text = `{
+  "name": "demo",
+  "dependencies": { "react": "^18.2.0", "@acme/ui": "workspace:*" },
+  "devDependencies": { "typescript": "~5.3.0" },
+  "overrides": { "leftpad": "1.0.0" }
+}`;
+      assert.deepEqual(overlayDependencies(text), [
+        { name: "react", range: "^18.2.0" },
+        { name: "typescript", range: "~5.3.0" },
+      ]);
+      assert.deepEqual(overlayDependencies("[]"), []);
+    });
   });
 });
