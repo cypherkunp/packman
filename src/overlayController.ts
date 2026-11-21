@@ -16,6 +16,7 @@ import {
   type OverlayRange,
 } from "./buildOverlay";
 import { formatGithubResetClock, sharedGithubBudget } from "./githubBudget";
+import { GithubPauseWatch } from "./githubPauseWatch";
 import { isOverlayTarget, overlayTargetDocuments } from "./overlayTarget";
 import {
   enrichmentRefresh,
@@ -35,7 +36,7 @@ const HOVER_COMMANDS = [
   GITHUB_SETTINGS_COMMAND,
   REFRESH_ENRICHMENT_COMMAND,
 ];
-/** How often block summaries re-check whether GitHub is paused. */
+/** How often, while GitHub is paused, summaries check whether it resumed. */
 const GITHUB_PAUSE_POLL_MS = 15_000;
 /** Schemes whose documents can be edited and whose scripts can be run. */
 const EDITABLE_SCHEMES = new Set(["file", "untitled", "vscode-remote"]);
@@ -97,14 +98,12 @@ export function registerOverlay(
   };
 
   /** Re-render summaries when the GitHub budget blocks or resumes. */
-  let githubPaused = isGithubPaused();
-  const githubPauseWatch = setInterval(() => {
-    const paused = isGithubPaused();
-    if (paused !== githubPaused) {
-      githubPaused = paused;
-      changed.fire();
-    }
-  }, GITHUB_PAUSE_POLL_MS);
+  const githubPauseWatch = new GithubPauseWatch({
+    isPaused: isGithubPaused,
+    onChange: () => changed.fire(),
+    setTimer: (callback) => setInterval(callback, GITHUB_PAUSE_POLL_MS),
+    clearTimer: (timer) => clearInterval(timer),
+  });
 
   /** Eager enrichment per Dependency name, degraded results included. */
   const known = new Map<string, DependencyEnrichment>();
@@ -264,9 +263,10 @@ export function registerOverlay(
           overlayDependencies(text).find(
             (row) => row.name === target.dependency,
           )?.range ?? "";
-        const loading = loadGithub(target.dependency, range).catch(
-          () => undefined,
-        );
+        const loading = loadGithub(target.dependency, range)
+          .catch(() => undefined)
+          // A blocked budget shows `GitHub paused` in summaries at once.
+          .finally(() => githubPauseWatch.check());
         await Promise.race([
           loading,
           new Promise((resolve) => setTimeout(resolve, HOVER_GITHUB_WAIT_MS)),
@@ -285,6 +285,7 @@ export function registerOverlay(
   };
 
   const refresh = () => {
+    githubPauseWatch.check();
     changed.fire();
     renderDecorations();
     enrichNewDependencies();
@@ -302,7 +303,7 @@ export function registerOverlay(
     changed,
     { dispose: () => debounce && clearTimeout(debounce) },
     { dispose: () => enrichAbort.abort() },
-    { dispose: () => clearInterval(githubPauseWatch) },
+    githubPauseWatch,
     ...decorationTypes.values(),
     vscode.window.onDidChangeVisibleTextEditors(refresh),
     enrichmentRefresh.onRefresh(reenrich),
