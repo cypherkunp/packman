@@ -4,10 +4,8 @@ import {
   type Node as JsonNode,
 } from "jsonc-parser";
 import { dependencyStatus, nonRegistrySource } from "./dependencyStatus";
-import type {
-  CellDegrade,
-  EnrichedDependencyRow,
-} from "./enrichDependencyRow";
+import type { CellDegrade, EnrichedDependencyRow } from "./enrichDependencyRow";
+import { npmPackageUrl } from "./fetchNpmLatest";
 import { DEPENDENCY_BAGS, type DependencyRow } from "./packageViewModel";
 
 /**
@@ -29,11 +27,7 @@ export type OverlayLens = {
 };
 
 export type OverlayDecorationTone =
-  | "outdated"
-  | "latest"
-  | "risk"
-  | "pending"
-  | "degraded";
+  "outdated" | "latest" | "risk" | "pending" | "degraded";
 
 export type OverlayDecoration = {
   range: OverlayRange;
@@ -43,6 +37,8 @@ export type OverlayDecoration = {
 
 export type OverlayHover = {
   range: OverlayRange;
+  /** The Dependency this hover belongs to. */
+  dependency: string;
   /** Markdown; may contain `command:` links. */
   markdown: string;
 };
@@ -67,7 +63,24 @@ export type OverlayContext = {
    * still loading and shows the pending marker.
    */
   enrichment?: ReadonlyMap<string, DependencyEnrichment>;
+  /**
+   * GitHub enrichment loaded on hover, per Dependency name. A name with no
+   * entry has not loaded yet and its hover shows a loading note.
+   */
+  github?: ReadonlyMap<string, DependencyGithub>;
+  /** Local clock label (e.g. "14:05") while the GitHub budget is blocked. */
+  githubPausedUntil?: string;
 };
+
+/** The GitHub-only enrichment a Dependency hover reads. */
+export type DependencyGithub = Pick<
+  EnrichedDependencyRow,
+  | "githubUrl"
+  | "issuesUrl"
+  | "openIssuesCount"
+  | "githubDegrade"
+  | "issuesDegrade"
+>;
 
 /** The eager enrichment a Dependency decoration reads. */
 export type DependencyEnrichment = Pick<
@@ -77,6 +90,9 @@ export type DependencyEnrichment = Pick<
 
 export const RUN_SCRIPT_COMMAND = "packman.runScript";
 export const MANAGE_TRUST_COMMAND = "workbench.trust.manage";
+export const SOCKET_SETTINGS_COMMAND = "packman.openSocketSettings";
+export const GITHUB_SETTINGS_COMMAND = "packman.openGithubSettings";
+export const REFRESH_ENRICHMENT_COMMAND = "packman.refreshEnrichment";
 
 export function emptyOverlay(): Overlay {
   return { lenses: [], decorations: [], hovers: [] };
@@ -94,6 +110,7 @@ export function buildOverlay(text: string, context: OverlayContext): Overlay {
   const toRange = rangeMapper(text);
   overlay.lenses.push(...scriptLenses(root, context, toRange));
   overlay.decorations.push(...dependencyDecorations(root, context, toRange));
+  overlay.hovers.push(...dependencyHovers(root, context, toRange));
   return overlay;
 }
 
@@ -146,6 +163,105 @@ function dependencyDecorations(
     );
     return signal ? [{ range: toRange(dependency.property), ...signal }] : [];
   });
+}
+
+function dependencyHovers(
+  root: JsonNode,
+  context: OverlayContext,
+  toRange: (node: JsonNode) => OverlayRange,
+): OverlayHover[] {
+  return dependencyNodes(root).map((dependency) => ({
+    range: toRange(dependency.property),
+    dependency: dependency.name,
+    markdown: hoverMarkdown(
+      dependency.name,
+      context.enrichment?.get(dependency.name),
+      context.github?.get(dependency.name),
+      context.githubPausedUntil,
+    ),
+  }));
+}
+
+function hoverMarkdown(
+  name: string,
+  known: DependencyEnrichment | undefined,
+  github: DependencyGithub | undefined,
+  githubPausedUntil: string | undefined,
+): string {
+  const title = known?.latest
+    ? `**${name}** · latest \`${known.latest}\``
+    : `**${name}**`;
+  const links = [`[npm](${npmPackageUrl(name)})`];
+  if (github?.githubUrl) {
+    links.push(`[GitHub](${github.githubUrl})`);
+  }
+  const paragraphs = [title];
+  if (github?.openIssuesCount !== undefined && github.issuesUrl) {
+    links.push(
+      `[${github.openIssuesCount} open issues + PRs](${github.issuesUrl})`,
+    );
+    paragraphs.push(links.join(" · "));
+    paragraphs.push("_GitHub counts open issues and pull requests together._");
+  } else {
+    paragraphs.push(links.join(" · "));
+  }
+  if (!github) {
+    paragraphs.push("_GitHub repo and open issues + PRs loading…_");
+  }
+  const socket = known?.socket;
+  if (socket?.kind === "score") {
+    paragraphs.push(
+      `Socket score **${socket.overall100}**/100 · [details](${socket.url})`,
+    );
+  } else if (socket?.kind === "cta") {
+    paragraphs.push(
+      `[Configure Socket…](command:${SOCKET_SETTINGS_COMMAND}) to see supply-chain scores.`,
+    );
+  }
+  const githubNote = githubStatusNote(github, githubPausedUntil);
+  if (githubNote) {
+    paragraphs.push(githubNote);
+  }
+  const failures = failureNotes(known, github);
+  if (failures.length > 0) {
+    paragraphs.push(
+      [...failures, `[Refresh](command:${REFRESH_ENRICHMENT_COMMAND})`].join(
+        " · ",
+      ),
+    );
+  }
+  return paragraphs.join("\n\n");
+}
+
+function githubStatusNote(
+  github: DependencyGithub | undefined,
+  pausedUntil: string | undefined,
+): string | undefined {
+  const degrade = github?.githubDegrade ?? github?.issuesDegrade;
+  if (degrade === "rate_limited") {
+    const paused = pausedUntil
+      ? `GitHub paused until ${pausedUntil}`
+      : "GitHub rate-limited";
+    return `${paused} · [add a token…](command:${GITHUB_SETTINGS_COMMAND})`;
+  }
+  return undefined;
+}
+
+function failureNotes(
+  known: DependencyEnrichment | undefined,
+  github: DependencyGithub | undefined,
+): string[] {
+  const notes: string[] = [];
+  if (!known?.latest && known?.latestDegrade) {
+    notes.push(`⚠ npm lookup ${DEGRADE_LABEL[known.latestDegrade]}`);
+  }
+  if (github?.githubDegrade && github.githubDegrade !== "rate_limited") {
+    notes.push(`⚠ GitHub ${DEGRADE_LABEL[github.githubDegrade]}`);
+  }
+  if (github?.issuesDegrade && github.issuesDegrade !== "rate_limited") {
+    notes.push(`⚠ GitHub issues + PRs ${DEGRADE_LABEL[github.issuesDegrade]}`);
+  }
+  return notes;
 }
 
 const DEGRADE_LABEL: Record<CellDegrade, string> = {
