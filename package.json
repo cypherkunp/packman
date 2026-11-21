@@ -34,8 +34,16 @@
     "onCommand:packman.openUiMode",
     "onCommand:packman.openSocketSettings",
     "onCommand:packman.openGithubSettings",
-    "onCommand:packman.refreshEnrichment"
+    "onCommand:packman.refreshEnrichment",
+    "onLanguage:json",
+    "onCommand:packman.toggleOverlay"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In untrusted workspaces Packman shows its Overlay but does not offer to run scripts."
+    }
+  },
   "main": "./dist/extension.js",
   "contributes": {
     "customEditors": [
@@ -73,6 +81,10 @@
         "command": "packman.refreshEnrichment",
         "title": "Packman: Refresh Enrichment",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "packman.toggleOverlay",
+        "title": "Packman: Toggle Overlay"
       }
     ],
     "menus": {
@@ -125,6 +137,11 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Socket organization slug for `POST /orgs/{org}/purl`. Required together with `#packman.socket.apiToken#`."
+        },
+        "packman.overlay.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show the Packman Overlay (▶ Run actions on scripts) in the `package.json` text editor. `Packman: Toggle Overlay` hides or shows it for the current session."
         }
       }
     }
@@ -150,5 +167,8 @@
     "@types/vscode": "^1.85.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
   }
 }
