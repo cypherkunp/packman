@@ -1,13 +1,16 @@
 import * as vscode from "vscode";
 import { PACKMAN_VIEW_TYPE } from "./openWith";
+import { registerOverlay } from "./overlayController";
 import {
   enrichmentRefreshEmitter,
   PackageJsonEditorProvider,
+  scriptFallbackWarnedDirs,
 } from "./packageJsonEditorProvider";
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(PackageJsonEditorProvider.register());
   context.subscriptions.push(enrichmentRefreshEmitter);
+  context.subscriptions.push(registerOverlay(scriptFallbackWarnedDirs));
 
   context.subscriptions.push(
     vscode.commands.registerCommand("packman.openEditMode", () =>

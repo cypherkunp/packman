@@ -20,9 +20,13 @@ const manifest = JSON.parse(
     menus: { "editor/title": Array<{ command: string; when: string }> };
     keybindings: Array<{ command: string; when: string }>;
     configuration?: {
-      properties?: Record<string, { type?: string }>;
+      properties?: Record<string, { type?: string; default?: unknown }>;
     };
   };
+  capabilities?: {
+    untrustedWorkspaces?: { supported?: boolean | string };
+  };
+  activationEvents?: string[];
 };
 
 describe("extension manifest", () => {
@@ -100,5 +104,30 @@ describe("extension manifest", () => {
         (m) => m.command === "packman.refreshEnrichment",
       ),
     );
+  });
+
+  it("contributes the Overlay setting (default on) and toggle command", () => {
+    const enabled =
+      manifest.contributes.configuration?.properties?.[
+        "packman.overlay.enabled"
+      ];
+    assert.equal(enabled?.type, "boolean");
+    assert.equal(enabled?.default, true);
+    assert.ok(
+      manifest.contributes.commands.some(
+        (c) => c.command === "packman.toggleOverlay",
+      ),
+    );
+  });
+
+  it("runs with limited support in untrusted workspaces so the trust lens can show", () => {
+    assert.equal(
+      manifest.capabilities?.untrustedWorkspaces?.supported,
+      "limited",
+    );
+  });
+
+  it("activates when a JSON document opens so the Overlay can attach", () => {
+    assert.ok(manifest.activationEvents?.includes("onLanguage:json"));
   });
 });

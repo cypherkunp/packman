@@ -37,7 +37,8 @@ export const enrichmentStore = new EnrichmentStore({ cache: enrichmentCache });
 export const enrichmentRefreshEmitter = new vscode.EventEmitter<void>();
 
 /** Package dirs already warned about lockfile fallback (session-scoped). */
-const scriptFallbackWarnedDirs = new Set<string>();
+/** Package dirs already warned about npm fallback (shared with the Overlay). */
+export const scriptFallbackWarnedDirs = new Set<string>();
 
 export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvider {
   public static register(): vscode.Disposable {
@@ -311,6 +312,12 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
         }
         const script = (message as { script?: unknown }).script;
         if (typeof script !== "string" || script.length === 0) {
+          return;
+        }
+        if (!vscode.workspace.isTrusted) {
+          void vscode.window.showWarningMessage(
+            "Packman: trust this workspace to run scripts.",
+          );
           return;
         }
         const packageDir = dirname(document.uri.fsPath);
