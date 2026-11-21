@@ -9,8 +9,25 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Visualization"
   ],
+  "keywords": [
+    "package.json",
+    "npm",
+    "scripts",
+    "dependencies",
+    "outdated",
+    "socket",
+    "pnpm",
+    "yarn",
+    "bun"
+  ],
+  "galleryBanner": {
+    "color": "#1f1f1f",
+    "theme": "dark"
+  },
+  "pricing": "Free",
   "activationEvents": [
     "onCustomEditor:packman.packageJson",
     "onCommand:packman.openEditMode",
