@@ -2,7 +2,6 @@ import { dirname } from "node:path";
 import * as vscode from "vscode";
 import {
   buildOverlay,
-  isWellFormed,
   overlayDependencies,
   RUN_SCRIPT_COMMAND,
   GITHUB_SETTINGS_COMMAND,
@@ -18,6 +17,7 @@ import {
 import { formatGithubResetClock, sharedGithubBudget } from "./githubBudget";
 import { shouldFetchGithubOnHover } from "./githubOnHover";
 import { GithubPauseWatch } from "./githubPauseWatch";
+import { isWellFormed } from "./overlayTree";
 import {
   canRunScriptsFrom,
   isOverlayTarget,
