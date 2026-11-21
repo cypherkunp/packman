@@ -21,10 +21,9 @@ import {
 import {
   enrichmentRefresh,
   enrichmentStore,
-  scriptFallbackWarnedDirs,
 } from "./sessionState";
 import { resolveSocketCredentials } from "./socketCredentials";
-import { runPackageScript } from "./runPackageScript";
+import { runScriptFromEditor } from "./runScriptFromEditor";
 
 export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvider {
   public static register(): vscode.Disposable {
@@ -298,26 +297,7 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
         if (typeof script !== "string" || script.length === 0) {
           return;
         }
-        if (!vscode.workspace.isTrusted) {
-          void vscode.window.showWarningMessage(
-            "Packman: trust this workspace to run scripts.",
-          );
-          return;
-        }
-        const packageDir = dirname(document.uri.fsPath);
-        runPackageScript(packageDir, script, {
-          findTerminal: (name) =>
-            vscode.window.terminals.find((t) => t.name === name),
-          createTerminal: (options) =>
-            vscode.window.createTerminal({
-              name: options.name,
-              cwd: options.cwd,
-            }),
-          warn: (text) => {
-            void vscode.window.showWarningMessage(text);
-          },
-          warnedDirs: scriptFallbackWarnedDirs,
-        });
+        runScriptFromEditor(dirname(document.uri.fsPath), script);
       },
     );
 

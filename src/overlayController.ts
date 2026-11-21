@@ -26,10 +26,9 @@ import {
 import {
   enrichmentRefresh,
   enrichmentStore,
-  scriptFallbackWarnedDirs,
 } from "./sessionState";
 import { resolveGithubToken } from "./resolveGithubToken";
-import { runPackageScript } from "./runPackageScript";
+import { runScriptFromEditor } from "./runScriptFromEditor";
 import { resolveSocketCredentials } from "./socketCredentials";
 
 const OVERLAY_SETTING = "packman.overlay.enabled";
@@ -346,33 +345,10 @@ export function registerOverlay(): vscode.Disposable {
         if (typeof documentUri !== "string" || typeof script !== "string") {
           return;
         }
-        if (!vscode.workspace.isTrusted) {
-          void vscode.window.showWarningMessage(
-            "Packman: trust this workspace to run scripts.",
-          );
-          return;
-        }
-        const uri = vscode.Uri.parse(documentUri);
-        const packageDir = packageDirFor(uri);
-        if (!packageDir) {
-          void vscode.window.showWarningMessage(
-            "Packman: save this package.json to a folder to run its scripts.",
-          );
-          return;
-        }
-        runPackageScript(packageDir, script, {
-          findTerminal: (name) =>
-            vscode.window.terminals.find((t) => t.name === name),
-          createTerminal: (options) =>
-            vscode.window.createTerminal({
-              name: options.name,
-              cwd: options.cwd,
-            }),
-          warn: (text) => {
-            void vscode.window.showWarningMessage(text);
-          },
-          warnedDirs: scriptFallbackWarnedDirs,
-        });
+        runScriptFromEditor(
+          packageDirFor(vscode.Uri.parse(documentUri)),
+          script,
+        );
       },
     ),
   );
