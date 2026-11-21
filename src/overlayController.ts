@@ -18,8 +18,7 @@ import {
 import { formatGithubResetClock, sharedGithubBudget } from "./githubBudget";
 import { isOverlayTarget, overlayTargetDocuments } from "./overlayTarget";
 import {
-  enrichmentCache,
-  enrichmentRefreshEmitter,
+  enrichmentRefresh,
   enrichmentStore,
 } from "./packageJsonEditorProvider";
 import { resolveGithubToken } from "./resolveGithubToken";
@@ -306,11 +305,7 @@ export function registerOverlay(
     { dispose: () => clearInterval(githubPauseWatch) },
     ...decorationTypes.values(),
     vscode.window.onDidChangeVisibleTextEditors(refresh),
-    enrichmentRefreshEmitter.event(() => {
-      enrichmentCache.clear();
-      enrichmentStore.clear();
-      reenrich();
-    }),
+    enrichmentRefresh.onRefresh(reenrich),
     vscode.languages.registerCodeLensProvider(
       [{ pattern: "**/package.json" }],
       codeLensProvider,

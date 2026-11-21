@@ -2,14 +2,14 @@ import * as vscode from "vscode";
 import { PACKMAN_VIEW_TYPE } from "./openWith";
 import { registerOverlay } from "./overlayController";
 import {
-  enrichmentRefreshEmitter,
+  enrichmentRefresh,
   PackageJsonEditorProvider,
   scriptFallbackWarnedDirs,
 } from "./packageJsonEditorProvider";
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(PackageJsonEditorProvider.register());
-  context.subscriptions.push(enrichmentRefreshEmitter);
+  context.subscriptions.push(enrichmentRefresh);
   context.subscriptions.push(registerOverlay(scriptFallbackWarnedDirs));
 
   context.subscriptions.push(
@@ -33,11 +33,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.authentication.onDidChangeSessions((event) => {
       if (event.provider.id === "github") {
-        enrichmentRefreshEmitter.fire();
+        enrichmentRefresh.refresh();
       }
     }),
     vscode.commands.registerCommand("packman.refreshEnrichment", () => {
-      enrichmentRefreshEmitter.fire();
+      enrichmentRefresh.refresh();
     }),
   );
 }
