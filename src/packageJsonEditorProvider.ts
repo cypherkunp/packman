@@ -2,9 +2,6 @@ import * as vscode from "vscode";
 import { dirname } from "node:path";
 import type { EnrichedDependencyRow } from "./enrichDependencyRow";
 import { handoffGitDiffToTextEditor } from "./handoffGitDiff";
-import { EnrichmentCache, ENRICHMENT_TTL_MS } from "./enrichmentCache";
-import { EnrichmentRefresh } from "./enrichmentRefresh";
-import { EnrichmentStore } from "./enrichmentStore";
 import { npmPackageUrl } from "./fetchNpmLatest";
 import { probeGithubCoreLimit } from "./fetchGithubRepoSummary";
 import {
@@ -21,29 +18,13 @@ import {
   renderUiModeHtml,
   type UiModeExtras,
 } from "./renderUiModeHtml";
+import {
+  enrichmentRefresh,
+  enrichmentStore,
+  scriptFallbackWarnedDirs,
+} from "./sessionState";
 import { resolveSocketCredentials } from "./socketCredentials";
 import { runPackageScript } from "./runPackageScript";
-
-/** Shared across Packman UI mode editors for the extension host lifetime. */
-export const enrichmentCache = new EnrichmentCache<unknown>({
-  ttlMs: ENRICHMENT_TTL_MS,
-});
-
-/**
- * Process-wide Dependency enrichment keyed by name, layered over the cache.
- * Shared by UI mode and the Overlay so no package is fetched twice.
- */
-export const enrichmentStore = new EnrichmentStore({ cache: enrichmentCache });
-
-/** Refresh: clears the cache and store once, then tells every surface. */
-export const enrichmentRefresh = new EnrichmentRefresh(() => {
-  enrichmentCache.clear();
-  enrichmentStore.clear();
-});
-
-/** Package dirs already warned about lockfile fallback (session-scoped). */
-/** Package dirs already warned about npm fallback (shared with the Overlay). */
-export const scriptFallbackWarnedDirs = new Set<string>();
 
 export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvider {
   public static register(): vscode.Disposable {

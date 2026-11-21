@@ -26,7 +26,8 @@ import {
 import {
   enrichmentRefresh,
   enrichmentStore,
-} from "./packageJsonEditorProvider";
+  scriptFallbackWarnedDirs,
+} from "./sessionState";
 import { resolveGithubToken } from "./resolveGithubToken";
 import { runPackageScript } from "./runPackageScript";
 import { resolveSocketCredentials } from "./socketCredentials";
@@ -48,9 +49,7 @@ const GITHUB_PAUSE_POLL_MS = 15_000;
  * Thin VS Code adapter for the Overlay: feeds documents to the pure
  * `buildOverlay` and maps its output onto VS Code types one-to-one.
  */
-export function registerOverlay(
-  scriptFallbackWarnedDirs: Set<string>,
-): vscode.Disposable {
+export function registerOverlay(): vscode.Disposable {
   let sessionOverride: boolean | undefined;
   const changed = new vscode.EventEmitter<void>();
   let debounce: ReturnType<typeof setTimeout> | undefined;
