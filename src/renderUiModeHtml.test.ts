@@ -40,18 +40,29 @@ describe("renderUiModeHtml", () => {
     assert.doesNotMatch(html, /devDependencies/);
   });
 
-  it("renders objects and arrays inside code blocks", () => {
+  it("renders objects and arrays inside read-only formatted code blocks", () => {
     const html = renderUiModeHtml(
       JSON.stringify({
         name: "demo",
-        engines: { node: ">=20" },
+        engines: { node: ">=20", count: 1, ok: true, extra: null },
         keywords: ["a", "b"],
+        note: { raw: "<img onerror=alert(1)>" },
       }),
       "n",
     );
-    assert.match(html, /<pre class="code-block"><code>/);
-    assert.match(html, /&quot;node&quot;: &quot;&gt;=20&quot;/);
+    assert.match(html, /<pre class="code-block" aria-readonly="true"><code>/);
+    assert.match(html, /class="tok-key">/);
+    assert.match(html, /&quot;node&quot;/);
+    assert.match(html, /class="tok-string">/);
+    assert.match(html, /&quot;&gt;=20&quot;/);
+    assert.match(html, /class="tok-number">1</);
+    assert.match(html, /class="tok-boolean">true</);
+    assert.match(html, /class="tok-null">null</);
     assert.match(html, /\[[\s\S]*&quot;a&quot;[\s\S]*&quot;b&quot;[\s\S]*\]/);
+    assert.doesNotMatch(html, /<img/);
+    assert.match(html, /&lt;img onerror=alert\(1\)&gt;/);
+    assert.match(html, /pre\.code-block[\s\S]*word-break:\s*normal/);
+    assert.doesNotMatch(html, /contenteditable/);
   });
 
   it("renders enrichment columns and click targets when provided", () => {
@@ -112,6 +123,34 @@ describe("renderUiModeHtml", () => {
     );
     assert.match(html, /Set Socket token/);
     assert.match(html, /command:packman\.openSocketSettings/);
+  });
+
+  it("keeps repo links and shows one GitHub rate-limit notice", () => {
+    const row = {
+      name: "leftpad",
+      range: "^1.0.0",
+      npmUrl: "https://www.npmjs.com/package/leftpad",
+      githubUrl: "https://github.com/stevemao/left-pad",
+      issuesUrl: "https://github.com/stevemao/left-pad/issues",
+      issuesDegrade: "rate_limited" as const,
+    };
+    const html = renderUiModeHtml(
+      JSON.stringify({
+        name: "demo",
+        dependencies: { leftpad: "^1.0.0", other: "^2.0.0" },
+      }),
+      "n",
+      new Map([
+        ["leftpad", row],
+        ["other", { ...row, name: "other" }],
+      ]),
+      { githubResetLabel: "18:42" },
+    );
+    assert.equal(html.match(/GitHub rate limit reached/g)?.length, 1);
+    assert.match(html, /paused until 18:42/);
+    assert.match(html, /command:packman\.openGithubSettings/);
+    assert.match(html, /href="https:\/\/github\.com\/stevemao\/left-pad"/);
+    assert.doesNotMatch(html, /\(rate limited\)/);
   });
 
   it("shows a parse error shell for invalid JSON", () => {

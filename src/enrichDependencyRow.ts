@@ -8,6 +8,7 @@ import {
   type FetchLike,
   type NpmLatestResult,
 } from "./fetchNpmLatest";
+import type { GithubBudget } from "./githubBudget";
 import { normalizeGithubRepo } from "./normalizeGithubRepo";
 import type { SocketColumn } from "./socketColumn";
 
@@ -22,6 +23,8 @@ export type EnrichedDependencyRow = DependencyRow & {
   socket?: SocketColumn;
   latestDegrade?: CellDegrade;
   githubDegrade?: CellDegrade;
+  /** Set when the repo link is known but the issues count could not be loaded. */
+  issuesDegrade?: CellDegrade;
 };
 
 export type EnrichmentOptions = {
@@ -30,6 +33,7 @@ export type EnrichmentOptions = {
   cache?: EnrichmentCache<unknown>;
   signal?: AbortSignal;
   forceRefresh?: boolean;
+  githubBudget?: GithubBudget;
 };
 
 type GithubCache = Awaited<ReturnType<typeof fetchGithubRepoSummary>>;
@@ -105,8 +109,7 @@ async function continueGithub(
 
   const githubKey = enrichmentCacheKey("github", ownerRepo);
   if (cache?.getBlock(githubKey)) {
-    base.githubDegrade = "rate_limited";
-    applyGithubOk(base, peekOkGithub(cache, githubKey));
+    applyRateLimitedGithub(base, cache, githubKey);
     return base;
   }
 
@@ -122,13 +125,13 @@ async function continueGithub(
       options.githubToken,
       fetchImpl,
       init,
+      options.githubBudget,
     );
     if (github.status === "ok" || github.status === "not_found") {
       cache?.set(githubKey, github);
     } else if (github.status === "rate_limited") {
       rememberBlock(cache, githubKey, github.retryAfterMs);
-      base.githubDegrade = "rate_limited";
-      applyGithubOk(base, peekOkGithub(cache, githubKey));
+      applyRateLimitedGithub(base, cache, githubKey);
       return base;
     } else if (github.status === "offline" || github.status === "timeout") {
       base.githubDegrade = github.status;
@@ -178,6 +181,18 @@ function applyNpmOk(
     return;
   }
   base.latest = npm.version;
+}
+
+function applyRateLimitedGithub(
+  base: EnrichedDependencyRow,
+  cache: EnrichmentCache<unknown> | undefined,
+  githubKey: string,
+): void {
+  const cached = peekOkGithub(cache, githubKey);
+  applyGithubOk(base, cached);
+  if (!cached) {
+    base.issuesDegrade = "rate_limited";
+  }
 }
 
 function applyGithubOk(

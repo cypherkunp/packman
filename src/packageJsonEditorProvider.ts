@@ -4,9 +4,16 @@ import {
   enrichDependencyRow,
   type EnrichedDependencyRow,
 } from "./enrichDependencyRow";
+import { handoffGitDiffToTextEditor } from "./handoffGitDiff";
 import { EnrichmentCache, ENRICHMENT_TTL_MS } from "./enrichmentCache";
 import { npmPackageUrl } from "./fetchNpmLatest";
+import { probeGithubCoreLimit } from "./fetchGithubRepoSummary";
 import { fetchSocketScoresByPurl } from "./fetchSocketScores";
+import {
+  formatGithubResetClock,
+  sharedGithubBudget,
+} from "./githubBudget";
+import { resolveGithubToken } from "./resolveGithubToken";
 import { ENRICHMENT_CONCURRENCY, mapPool } from "./mapPool";
 import { PACKMAN_VIEW_TYPE } from "./openWith";
 import { parsePackageDocument } from "./parsePackageDocument";
@@ -18,8 +25,6 @@ import {
 } from "./socketColumn";
 import { resolveSocketCredentials } from "./socketCredentials";
 import { runPackageScript } from "./runPackageScript";
-
-const FETCH_TIMEOUT_MS = 12_000;
 
 /** Shared across Packman UI mode editors for the extension host lifetime. */
 export const enrichmentCache = new EnrichmentCache<unknown>({
@@ -49,15 +54,23 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken,
   ): Promise<void> {
+    if (await handoffGitDiffToTextEditor(document, webviewPanel)) {
+      return;
+    }
+
     webviewPanel.webview.options = {
       enableScripts: true,
-      enableCommandUris: ["packman.openSocketSettings"],
+      enableCommandUris: [
+        "packman.openSocketSettings",
+        "packman.openGithubSettings",
+      ],
     };
 
     const nonce = getNonce();
     let enrichmentByName = new Map<string, EnrichedDependencyRow>();
     let enrichmentGeneration = 0;
     let forceRefresh = false;
+    let enrichAbort: AbortController | undefined;
 
     const readSocketCredentials = () => {
       const config = vscode.workspace.getConfiguration("packman");
@@ -68,10 +81,14 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
     };
 
     const updateWebview = () => {
+      const until = sharedGithubBudget.blockedUntilMs();
       webviewPanel.webview.html = renderUiModeHtml(
         document.getText(),
         nonce,
         enrichmentByName,
+        until !== undefined
+          ? { githubResetLabel: formatGithubResetClock(until) }
+          : undefined,
       );
     };
 
@@ -97,6 +114,9 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
     };
 
     const refreshEnrichment = async () => {
+      enrichAbort?.abort();
+      const abort = new AbortController();
+      enrichAbort = abort;
       const generation = ++enrichmentGeneration;
       const refresh = forceRefresh;
       forceRefresh = false;
@@ -112,25 +132,51 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
       const rows = model.dependencyBags.flatMap((bag) => bag.rows);
       const unique = [...new Map(rows.map((row) => [row.name, row])).values()];
       const config = vscode.workspace.getConfiguration("packman");
-      const githubTokenRaw = config.get<string>("github.token");
-      const githubToken =
-        typeof githubTokenRaw === "string" && githubTokenRaw.trim().length > 0
-          ? githubTokenRaw.trim()
-          : undefined;
+      const githubToken = await resolveGithubToken(
+        config.get<string>("github.token"),
+        (scopes) =>
+          vscode.authentication.getSession("github", scopes, {
+            silent: false,
+          }),
+      );
+      if (abort.signal.aborted || generation !== enrichmentGeneration) {
+        return;
+      }
+      sharedGithubBudget.setIdentity(githubToken);
+      await probeGithubCoreLimit(
+        githubToken,
+        sharedGithubBudget,
+        fetch,
+        abort.signal,
+      );
+      if (abort.signal.aborted || generation !== enrichmentGeneration) {
+        return;
+      }
       const socketCredentials = readSocketCredentials();
-      const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
 
       const enrichedRows = await mapPool(
         unique,
         ENRICHMENT_CONCURRENCY,
-        async (row) =>
-          enrichDependencyRow(row, {
+        async (row) => {
+          if (abort.signal.aborted) {
+            return {
+              ...row,
+              npmUrl: npmPackageUrl(row.name),
+            };
+          }
+          return enrichDependencyRow(row, {
             githubToken,
             cache: enrichmentCache,
-            signal,
+            signal: abort.signal,
             forceRefresh: refresh,
-          }),
+            githubBudget: sharedGithubBudget,
+          });
+        },
+        abort.signal,
       );
+      if (abort.signal.aborted || generation !== enrichmentGeneration) {
+        return;
+      }
 
       let socketResult = undefined;
       if (socketCredentials.status === "ready") {
@@ -208,6 +254,7 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
     );
 
     webviewPanel.onDidDispose(() => {
+      enrichAbort?.abort();
       enrichmentGeneration += 1;
       changeDocumentSubscription.dispose();
       refreshSubscription.dispose();

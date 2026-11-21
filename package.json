@@ -2,7 +2,7 @@
   "name": "packman",
   "displayName": "Packman",
   "description": "Open package.json in a native-feeling UI with script runners and dependency intelligence.",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "publisher": "cypherkunp",
   "license": "MIT",
   "engines": {
@@ -16,6 +16,7 @@
     "onCommand:packman.openEditMode",
     "onCommand:packman.openUiMode",
     "onCommand:packman.openSocketSettings",
+    "onCommand:packman.openGithubSettings",
     "onCommand:packman.refreshEnrichment"
   ],
   "main": "./dist/extension.js",
@@ -46,6 +47,10 @@
       {
         "command": "packman.openSocketSettings",
         "title": "Packman: Open Socket Settings"
+      },
+      {
+        "command": "packman.openGithubSettings",
+        "title": "Packman: Open GitHub Settings"
       },
       {
         "command": "packman.refreshEnrichment",
@@ -92,7 +97,7 @@
         "packman.github.token": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional GitHub personal access token used to raise API rate limits when enriching Dependency rows (repo URL + open issues)."
+          "markdownDescription": "Optional GitHub token for Dependency issue counts. When empty, Packman uses the GitHub account signed in to the editor (Accounts menu). Without either, GitHub allows 60 requests/hour per IP — one package.json can exhaust that, and issue counts pause until the window resets. A token or signed-in account raises the limit to 5,000/hour. Public repo metadata needs no scopes."
         },
         "packman.socket.apiToken": {
           "type": "string",
