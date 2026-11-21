@@ -9,7 +9,7 @@ The VS Code / Cursor extension for viewing and acting on a `package.json`, throu
 _Avoid_: the viewer, the panel, package UI
 
 **Overlay**:
-The set of Packman annotations attached to a `package.json` in the text editor: run actions on scripts, dependency signals, and per-block summaries. The default way Packman appears.
+The set of Packman additions attached to a `package.json` in the text editor: run actions on scripts, dependency signals, and per-block summaries. The default way Packman appears.
 _Avoid_: lens mode, inline mode, annotations, edit mode
 
 **UI mode**:
