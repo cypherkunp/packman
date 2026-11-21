@@ -16,7 +16,7 @@ import {
 } from "./socketColumn";
 import type { SocketCredentials } from "./socketCredentials";
 
-export type EnrichmentStoreDeps = {
+export type EnrichmentStoreSources = {
   cache: EnrichmentCache<unknown>;
   fetchImpl?: FetchLike;
 };
@@ -55,12 +55,12 @@ export class EnrichmentStore {
     Promise<EnrichedDependencyRow>
   >();
 
-  constructor(private readonly deps: EnrichmentStoreDeps) {}
+  constructor(private readonly sources: EnrichmentStoreSources) {}
 
   /** What is already known for a Dependency, with no fetch. */
   peek(row: DependencyRow): EnrichedDependencyRow | undefined {
-    const known = this.entries.get(row.name);
-    return known ? { ...known, range: row.range } : undefined;
+    const stored = this.entries.get(row.name);
+    return stored ? { ...stored, range: row.range } : undefined;
   }
 
   /**
@@ -76,13 +76,13 @@ export class EnrichmentStore {
     const eager = await mapPool(
       unique,
       ENRICHMENT_CONCURRENCY,
-      (row) => this.eagerOne(row, options),
+      (row) => this.enrichEagerOne(row, options),
       signal,
     );
-    const known = eager.filter(
+    const fetched = eager.filter(
       (row): row is EnrichedDependencyRow => row !== undefined,
     );
-    const withSocket = await this.withSocket(known, options);
+    const withSocket = await this.withSocket(fetched, options);
     return new Map(
       unique.flatMap((row) => {
         const hit = withSocket.find((entry) => entry.name === row.name);
@@ -106,7 +106,7 @@ export class EnrichmentStore {
     }
     let pending = this.githubInFlight.get(row.name);
     if (!pending) {
-      pending = this.githubOne(row, options);
+      pending = this.enrichGithubOne(row, options);
       this.githubInFlight.set(row.name, pending);
       const started = pending;
       void started.finally(() => {
@@ -128,16 +128,16 @@ export class EnrichmentStore {
     this.githubInFlight.clear();
   }
 
-  private async githubOne(
+  private async enrichGithubOne(
     row: DependencyRow,
     options: GithubEnrichmentOptions,
   ): Promise<EnrichedDependencyRow> {
     const eager =
       this.degraded.get(row.name) ??
-      (await this.eagerOne(row, { signal: options.signal }));
+      (await this.enrichEagerOne(row, { signal: options.signal }));
     const enriched = await enrichDependencyGithub(eager, {
-      cache: this.deps.cache,
-      fetchImpl: this.deps.fetchImpl,
+      cache: this.sources.cache,
+      fetchImpl: this.sources.fetchImpl,
       signal: options.signal,
       forceRefresh: options.forceRefresh,
       githubToken: options.githubToken,
@@ -152,14 +152,14 @@ export class EnrichmentStore {
     return enriched;
   }
 
-  private eagerOne(
+  private enrichEagerOne(
     row: DependencyRow,
     options: EagerEnrichmentOptions,
   ): Promise<EnrichedDependencyRow> {
     const signal = options.signal;
-    const known = this.entries.get(row.name);
-    if (known && !options.forceRefresh) {
-      return Promise.resolve(known);
+    const stored = this.entries.get(row.name);
+    if (stored && !options.forceRefresh) {
+      return Promise.resolve(stored);
     }
     const pending = this.eagerInFlight.get(row.name);
     if (pending) {
@@ -169,8 +169,8 @@ export class EnrichmentStore {
       this.githubLoaded.delete(row.name);
     }
     const started = enrichDependencyEager(row, {
-      cache: this.deps.cache,
-      fetchImpl: this.deps.fetchImpl,
+      cache: this.sources.cache,
+      fetchImpl: this.sources.fetchImpl,
       signal,
       forceRefresh: options.forceRefresh,
     }).then((enriched) => {
@@ -219,7 +219,7 @@ export class EnrichmentStore {
         apiToken: credentials.apiToken,
         components: socketComponentsFromRows(unsettled),
       },
-      this.deps.fetchImpl,
+      this.sources.fetchImpl,
     );
     const scored = applySocketEnrichment(unsettled, credentials, result);
     if (result.status === "ok" && !options.signal?.aborted) {

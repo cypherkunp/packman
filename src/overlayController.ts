@@ -77,7 +77,7 @@ export function registerOverlay(): vscode.Disposable {
       enabled: isEnabled(),
       trusted: vscode.workspace.isTrusted,
       readOnly: isReadOnly(document),
-      enrichment: known,
+      enrichment: enrichmentByName,
       socketConfigured: socketCredentials().status === "ready",
       githubPaused: isGithubPaused(),
       github,
@@ -108,7 +108,7 @@ export function registerOverlay(): vscode.Disposable {
   });
 
   /** Eager enrichment per Dependency name, degraded results included. */
-  const known = new Map<string, DependencyEnrichment>();
+  const enrichmentByName = new Map<string, DependencyEnrichment>();
   /** Names already sent to eager enrichment, so edits don't refetch. */
   const requested = new Set<string>();
   let enrichAbort = new AbortController();
@@ -166,7 +166,7 @@ export function registerOverlay(): vscode.Disposable {
           return;
         }
         for (const [name, row] of enriched) {
-          known.set(name, row);
+          enrichmentByName.set(name, row);
           // Let a later pass retry lookups that failed outright.
           if (!row.latest && row.latestDegrade) {
             requested.delete(name);
@@ -186,7 +186,7 @@ export function registerOverlay(): vscode.Disposable {
   const reenrich = () => {
     enrichAbort.abort();
     enrichAbort = new AbortController();
-    known.clear();
+    enrichmentByName.clear();
     requested.clear();
     github.clear();
     changed.fire();
@@ -235,8 +235,8 @@ export function registerOverlay(): vscode.Disposable {
       return;
     }
     github.set(name, githubPart(enriched));
-    if (!known.has(name) && (enriched.latest || enriched.latestDegrade)) {
-      known.set(name, enriched);
+    if (!enrichmentByName.has(name) && (enriched.latest || enriched.latestDegrade)) {
+      enrichmentByName.set(name, enriched);
       renderDecorations();
     }
   };

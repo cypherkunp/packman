@@ -74,15 +74,21 @@ export function overlayRoot(
   return repaired === undefined ? undefined : parseTree(repaired);
 }
 
-const entryId = (block: string, name: string) => `${block}\u0000${name}`;
+/** One block entry's identity, e.g. the `build` entry of `scripts`. */
+type EntryId = string & { readonly __entryId: unique symbol };
+
+function entryId(block: string, name: string): EntryId {
+  // NUL can't appear in a block name, so the pair can't collide.
+  return `${block}\u0000${name}` as EntryId;
+}
 
 /** `(block, name)` identities of the Overlay entries in well-formed text. */
-function entryIds(text: string): Set<string> | undefined {
+function entryIds(text: string): Set<EntryId> | undefined {
   const root = parseWellFormed(text);
   if (root?.type !== "object") {
     return undefined;
   }
-  const ids = new Set<string>();
+  const ids = new Set<EntryId>();
   for (const block of OVERLAY_BLOCKS) {
     const node = findNodeAtLocation(root, [block]);
     for (const property of node?.type === "object"

@@ -215,10 +215,10 @@ function dependencyDecorations(
   toRange: (node: JsonNode) => OverlayRange,
 ): OverlayDecoration[] {
   return dependencyNodes(root).flatMap((dependency) => {
-    const known = context.enrichment?.get(dependency.name);
+    const enrichment = context.enrichment?.get(dependency.name);
     const signal = withSocketScore(
-      dependencySignal(dependency.range, known),
-      known,
+      dependencySignal(dependency.range, enrichment),
+      enrichment,
     );
     return signal ? [{ range: toRange(dependency.property), ...signal }] : [];
   });
@@ -243,12 +243,12 @@ function dependencyHovers(
 
 function hoverMarkdown(
   name: string,
-  known: DependencyEnrichment | undefined,
+  enrichment: DependencyEnrichment | undefined,
   github: DependencyGithub | undefined,
   githubPausedUntil: string | undefined,
 ): string {
-  const title = known?.latest
-    ? `**${name}** · latest \`${known.latest}\``
+  const title = enrichment?.latest
+    ? `**${name}** · latest \`${enrichment.latest}\``
     : `**${name}**`;
   const links = [`[npm](${npmPackageUrl(name)})`];
   if (github?.githubUrl) {
@@ -267,7 +267,7 @@ function hoverMarkdown(
   if (!github) {
     paragraphs.push("_GitHub repo and open issues + PRs loading…_");
   }
-  const socket = known?.socket;
+  const socket = enrichment?.socket;
   if (socket?.kind === "score") {
     paragraphs.push(
       `Socket score **${socket.overall100}**/100 · [details](${socket.url})`,
@@ -281,7 +281,7 @@ function hoverMarkdown(
   if (githubNote) {
     paragraphs.push(githubNote);
   }
-  const failures = failureNotes(known, github);
+  const failures = failureNotes(enrichment, github);
   if (failures.length > 0) {
     paragraphs.push(
       [...failures, `[Refresh](command:${REFRESH_ENRICHMENT_COMMAND})`].join(
@@ -307,12 +307,12 @@ function githubStatusNote(
 }
 
 function failureNotes(
-  known: DependencyEnrichment | undefined,
+  enrichment: DependencyEnrichment | undefined,
   github: DependencyGithub | undefined,
 ): string[] {
   const notes: string[] = [];
-  if (!known?.latest && known?.latestDegrade) {
-    notes.push(`⚠ npm lookup ${DEGRADE_LABEL[known.latestDegrade]}`);
+  if (!enrichment?.latest && enrichment?.latestDegrade) {
+    notes.push(`⚠ npm lookup ${DEGRADE_LABEL[enrichment.latestDegrade]}`);
   }
   if (github?.githubDegrade && github.githubDegrade !== "rate_limited") {
     notes.push(`⚠ GitHub ${DEGRADE_LABEL[github.githubDegrade]}`);
@@ -333,9 +333,9 @@ type DependencySignal = { text: string; tone: OverlayDecorationTone };
 
 function withSocketScore(
   signal: DependencySignal | undefined,
-  known: DependencyEnrichment | undefined,
+  enrichment: DependencyEnrichment | undefined,
 ): DependencySignal | undefined {
-  const socket = known?.socket;
+  const socket = enrichment?.socket;
   if (socket?.kind !== "score") {
     return signal;
   }
@@ -348,20 +348,20 @@ function withSocketScore(
 
 function dependencySignal(
   range: string,
-  known: DependencyEnrichment | undefined,
+  enrichment: DependencyEnrichment | undefined,
 ): DependencySignal | undefined {
-  if (!known) {
+  if (!enrichment) {
     return { text: "…", tone: "pending" };
   }
-  if (!known.latest && known.latestDegrade) {
+  if (!enrichment.latest && enrichment.latestDegrade) {
     return {
-      text: `⚠ npm ${DEGRADE_LABEL[known.latestDegrade]}`,
+      text: `⚠ npm ${DEGRADE_LABEL[enrichment.latestDegrade]}`,
       tone: "degraded",
     };
   }
-  const status = dependencyStatus(range, known.latest);
-  if (status.kind === "behind" && known.latest) {
-    return { text: `→ ${known.latest}`, tone: "outdated" };
+  const status = dependencyStatus(range, enrichment.latest);
+  if (status.kind === "behind" && enrichment.latest) {
+    return { text: `→ ${enrichment.latest}`, tone: "outdated" };
   }
   if (status.kind === "current") {
     return { text: "✓ latest", tone: "latest" };
