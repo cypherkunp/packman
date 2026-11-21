@@ -22,6 +22,17 @@ export function activate(context: vscode.ExtensionContext): void {
         "packman.socket",
       );
     }),
+    vscode.commands.registerCommand("packman.openGithubSettings", async () => {
+      await vscode.commands.executeCommand(
+        "workbench.action.openSettings",
+        "packman.github.token",
+      );
+    }),
+    vscode.authentication.onDidChangeSessions((event) => {
+      if (event.provider.id === "github") {
+        enrichmentRefreshEmitter.fire();
+      }
+    }),
     vscode.commands.registerCommand("packman.refreshEnrichment", () => {
       enrichmentRefreshEmitter.fire();
     }),

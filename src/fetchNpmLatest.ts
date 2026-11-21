@@ -1,6 +1,7 @@
 import {
   classifyFetchFailure,
   parseRetryAfterMs,
+  requestSignal,
 } from "./fetchFailures";
 
 export type NpmLatestResult =
@@ -26,10 +27,16 @@ export async function fetchNpmLatest(
   fetchImpl: FetchLike = fetch,
   init?: RequestInit,
 ): Promise<NpmLatestResult> {
+  if (init?.signal?.aborted) {
+    return { status: "timeout" };
+  }
   const encoded = encodeNpmPackageName(packageName);
   const url = `https://registry.npmjs.org/${encoded}/latest`;
   try {
-    const response = await fetchImpl(url, init);
+    const response = await fetchImpl(url, {
+      ...init,
+      signal: requestSignal(init?.signal),
+    });
     if (response.status === 404) {
       return { status: "not_found" };
     }

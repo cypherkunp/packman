@@ -53,6 +53,8 @@ describe("enrichDependencyRow", () => {
     );
     assert.equal(enriched.latest, "1.3.0");
     assert.equal(enriched.githubUrl, "https://github.com/stevemao/left-pad");
+    assert.equal(enriched.githubDegrade, undefined);
+    assert.equal(enriched.issuesDegrade, "rate_limited");
     assert.equal(enriched.openIssuesCount, undefined);
   });
 

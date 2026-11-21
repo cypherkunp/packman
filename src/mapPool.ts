@@ -3,8 +3,9 @@ export async function mapPool<T, R>(
   items: readonly T[],
   concurrency: number,
   worker: (item: T, index: number) => Promise<R>,
+  signal?: AbortSignal,
 ): Promise<R[]> {
-  if (items.length === 0) {
+  if (items.length === 0 || signal?.aborted) {
     return [];
   }
   const limit = Math.max(1, concurrency);
@@ -13,6 +14,9 @@ export async function mapPool<T, R>(
 
   async function run(): Promise<void> {
     for (;;) {
+      if (signal?.aborted) {
+        return;
+      }
       const index = nextIndex;
       nextIndex += 1;
       if (index >= items.length) {

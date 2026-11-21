@@ -8,10 +8,16 @@ import { npmPackageUrl } from "./fetchNpmLatest";
 
 export type EnrichmentByName = ReadonlyMap<string, EnrichedDependencyRow>;
 
+export type UiModeExtras = {
+  /** Local clock label for when GitHub issue counts resume, e.g. "18:42". */
+  githubResetLabel?: string;
+};
+
 export function renderUiModeHtml(
   documentText: string,
   nonce: string,
   enrichmentByName: EnrichmentByName = new Map(),
+  extras?: UiModeExtras,
 ): string {
   const parsed = parsePackageDocument(documentText);
   if (!parsed.ok) {
@@ -19,7 +25,7 @@ export function renderUiModeHtml(
   }
   return shell(
     nonce,
-    packageBody(toPackageViewModel(parsed.value), enrichmentByName),
+    packageBody(toPackageViewModel(parsed.value), enrichmentByName, extras),
   );
 }
 
@@ -32,7 +38,10 @@ function shell(nonce: string, body: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Packman</title>
   <style nonce="${nonce}">
-    :root { color-scheme: light dark; }
+    :root {
+      color-scheme: light dark;
+      --col-gap: 1.5rem;
+    }
     body {
       margin: 0;
       padding: 1.25rem 1.5rem 2.5rem;
@@ -64,20 +73,27 @@ function shell(nonce: string, body: string): string {
     }
     dl {
       display: grid;
-      grid-template-columns: minmax(7rem, max-content) 1fr;
-      gap: 0.55rem 1.25rem;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 0.55rem var(--col-gap);
       margin: 0;
-      align-items: start;
+      align-items: baseline;
     }
     dt {
       color: var(--vscode-descriptionForeground);
-      padding-top: 0.15rem;
+      overflow-wrap: anywhere;
     }
     dd {
       margin: 0;
+      justify-self: stretch;
       min-width: 0;
+      max-width: 100%;
+      text-align: left;
       font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
       word-break: break-word;
+    }
+    dd:has(.scalar:not(.long)) {
+      justify-self: end;
+      text-align: right;
     }
     pre.code-block {
       margin: 0;
@@ -85,16 +101,30 @@ function shell(nonce: string, body: string): string {
       border-radius: 4px;
       border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
       background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+      color: var(--vscode-editor-foreground);
       overflow-x: auto;
+      max-width: 100%;
+      white-space: pre;
+      word-break: normal;
+      overflow-wrap: normal;
+      tab-size: 2;
+      user-select: text;
       font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
-      font-size: 0.9em;
-      line-height: 1.4;
+      font-size: var(--vscode-editor-font-size, 0.9em);
+      line-height: 1.45;
     }
     pre.code-block code {
       font: inherit;
       color: inherit;
       white-space: pre;
+      word-break: normal;
+      overflow-wrap: normal;
     }
+    .tok-key { color: var(--vscode-symbolIcon-keyForeground); }
+    .tok-string { color: var(--vscode-debugTokenExpression-string, var(--vscode-symbolIcon-stringForeground)); }
+    .tok-number { color: var(--vscode-debugTokenExpression-number, var(--vscode-symbolIcon-numberForeground)); }
+    .tok-boolean { color: var(--vscode-debugTokenExpression-boolean, var(--vscode-symbolIcon-booleanForeground)); }
+    .tok-null { color: var(--vscode-symbolIcon-nullForeground, var(--vscode-debugTokenExpression-boolean)); }
     .scripts {
       display: flex;
       flex-direction: column;
@@ -106,13 +136,14 @@ function shell(nonce: string, body: string): string {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
-      gap: 1rem;
+      gap: var(--col-gap);
       width: 100%;
       text-align: left;
       border: 1px solid var(--vscode-button-border, var(--vscode-widget-border, transparent));
       background: var(--vscode-button-secondaryBackground);
       color: var(--vscode-button-secondaryForeground);
-      padding: 0.5rem 0.75rem;
+      box-sizing: border-box;
+      padding: 0.5rem 0;
       border-radius: 4px;
       cursor: pointer;
       font: inherit;
@@ -130,9 +161,13 @@ function shell(nonce: string, body: string): string {
     }
     button.script-button .name {
       font-weight: 600;
-      flex-shrink: 0;
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      text-align: left;
     }
     button.script-button .cmd {
+      margin-left: auto;
       opacity: 0.72;
       font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
       font-size: 0.9em;
@@ -154,10 +189,22 @@ function shell(nonce: string, body: string): string {
       font-size: 0.95em;
     }
     th, td {
-      text-align: left;
-      padding: 0.45rem 0.7rem;
+      padding: 0.45rem 0 0.45rem var(--col-gap);
       border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
-      vertical-align: top;
+      vertical-align: baseline;
+    }
+    th:first-child,
+    td:first-child {
+      width: 100%;
+      padding-left: 0;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+    th:not(:first-child),
+    td:not(:first-child) {
+      width: 1%;
+      white-space: nowrap;
+      text-align: right;
     }
     tr:last-child td {
       border-bottom: none;
@@ -192,6 +239,13 @@ function shell(nonce: string, body: string): string {
       color: var(--vscode-errorForeground);
       white-space: pre-wrap;
     }
+    .notice {
+      margin: 0 0 1.25rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 4px;
+      border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-widget-border));
+      background: var(--vscode-inputValidation-warningBackground, transparent);
+    }
   </style>
 </head>
 <body>
@@ -224,8 +278,12 @@ function errorBody(message: string): string {
 function packageBody(
   model: PackageViewModel,
   enrichmentByName: EnrichmentByName,
+  extras?: UiModeExtras,
 ): string {
   const parts: string[] = [`<main>`, `<h1>Packman</h1>`];
+  if (githubRateLimitNotice(enrichmentByName)) {
+    parts.push(githubNoticeHtml(extras?.githubResetLabel));
+  }
 
   if (model.identity.length > 0) {
     parts.push(`<section class="section"><h2>Package</h2>`);
@@ -311,7 +369,9 @@ function dependencyRowHtml(row: EnrichedDependencyRow): string {
       ? `<a href="${escapeAttr(row.githubUrl)}">repo</a>${row.githubDegrade ? ` <span class="muted">(${escapeHtml(degradeLabel(row.githubDegrade))})</span>` : ""}`
       : `<span class="muted">—</span>`;
   const issuesTitle =
-    "Open issues and pull requests on GitHub (issues + PRs)";
+    row.issuesDegrade === "rate_limited"
+      ? "Paused — GitHub rate limit. The repo link still works."
+      : "Open issues and pull requests on GitHub (issues + PRs)";
   const issuesCell =
     row.openIssuesCount !== undefined && row.issuesUrl
       ? `<a href="${escapeAttr(row.issuesUrl)}" title="${escapeAttr(issuesTitle)}" aria-label="${escapeAttr(`${row.openIssuesCount} open issues and pull requests`)}">${row.openIssuesCount}</a>`
@@ -319,6 +379,20 @@ function dependencyRowHtml(row: EnrichedDependencyRow): string {
   const socketCell = socketCellHtml(row);
 
   return `<tr><td>${nameCell}</td><td>${escapeHtml(row.range)}</td><td>${latestCell}</td><td>${githubCell}</td><td>${issuesCell}</td><td>${socketCell}</td></tr>`;
+}
+
+function githubRateLimitNotice(enrichmentByName: EnrichmentByName): boolean {
+  for (const row of enrichmentByName.values()) {
+    if (row.issuesDegrade === "rate_limited") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function githubNoticeHtml(resetLabel: string | undefined): string {
+  const when = resetLabel ? ` until ${escapeHtml(resetLabel)}` : "";
+  return `<p class="notice">GitHub rate limit reached — issue counts paused${when}. Repo links still work. Allow the GitHub account prompt, or <a href="command:packman.openGithubSettings">set a token</a> (5,000/hour instead of 60).</p>`;
 }
 
 function degradeLabel(kind: "rate_limited" | "offline" | "timeout"): string {
@@ -360,15 +434,50 @@ function socketCellHtml(row: EnrichedDependencyRow): string {
 
 function renderValue(value: unknown): string {
   if (typeof value === "string") {
-    return escapeHtml(value);
+    const long = value.length > 40 ? " long" : "";
+    return `<span class="scalar${long}">${escapeHtml(value)}</span>`;
   }
   if (typeof value === "number" || typeof value === "boolean") {
-    return escapeHtml(String(value));
+    return `<span class="scalar">${escapeHtml(String(value))}</span>`;
   }
   if (value === null) {
-    return escapeHtml("null");
+    return `<span class="scalar">null</span>`;
   }
-  return `<pre class="code-block"><code>${escapeHtml(JSON.stringify(value, null, 2))}</code></pre>`;
+  const json = JSON.stringify(value, null, 2);
+  return `<pre class="code-block" aria-readonly="true"><code>${highlightJson(json)}</code></pre>`;
+}
+
+const JSON_TOKEN =
+  /"(?:\\.|[^"\\])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+
+function highlightJson(json: string): string {
+  let html = "";
+  let last = 0;
+  for (const match of json.matchAll(JSON_TOKEN)) {
+    const index = match.index ?? 0;
+    html += escapeHtml(json.slice(last, index));
+    html += colorJsonToken(match[0]);
+    last = index + match[0].length;
+  }
+  html += escapeHtml(json.slice(last));
+  return html;
+}
+
+function colorJsonToken(token: string): string {
+  if (token.startsWith('"')) {
+    const split = token.match(/^("(?:\\.|[^"\\])*")(\s*:)?$/);
+    if (split?.[2] !== undefined) {
+      return `<span class="tok-key">${escapeHtml(split[1] ?? "")}</span>${escapeHtml(split[2])}`;
+    }
+    return `<span class="tok-string">${escapeHtml(token)}</span>`;
+  }
+  if (token === "true" || token === "false") {
+    return `<span class="tok-boolean">${token}</span>`;
+  }
+  if (token === "null") {
+    return `<span class="tok-null">${token}</span>`;
+  }
+  return `<span class="tok-number">${escapeHtml(token)}</span>`;
 }
 
 function escapeHtml(text: string): string {
