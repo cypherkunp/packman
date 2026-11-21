@@ -17,6 +17,8 @@ export type CellDegrade = "rate_limited" | "offline" | "timeout";
 export type EnrichedDependencyRow = DependencyRow & {
   npmUrl: string;
   latest?: string;
+  /** `owner/repo` from npm metadata; the GitHub-only path needs it. */
+  githubRepo?: string;
   githubUrl?: string;
   issuesUrl?: string;
   openIssuesCount?: number;
@@ -38,7 +40,23 @@ export type EnrichmentOptions = {
 
 type GithubCache = Awaited<ReturnType<typeof fetchGithubRepoSummary>>;
 
+/**
+ * Full enrichment: the eager path followed by the GitHub-only path.
+ * UI mode uses this to keep its eager behaviour.
+ */
 export async function enrichDependencyRow(
+  row: DependencyRow,
+  options: EnrichmentOptions = {},
+): Promise<EnrichedDependencyRow> {
+  const eager = await enrichDependencyEager(row, options);
+  return enrichDependencyGithub(eager, options);
+}
+
+/**
+ * Eager path: npm latest (and the repo link npm declares). Never calls GitHub,
+ * so it is cheap enough to run whenever a package.json opens.
+ */
+export async function enrichDependencyEager(
   row: DependencyRow,
   options: EnrichmentOptions = {},
 ): Promise<EnrichedDependencyRow> {
@@ -74,38 +92,34 @@ export async function enrichDependencyRow(
       return base;
     } else if (npm.status === "offline" || npm.status === "timeout") {
       base.latestDegrade = npm.status;
-      const stale = peekOkNpm(cache, npmKey);
-      if (stale) {
-        applyNpmOk(base, stale);
-        return continueGithub(base, stale, options, fetchImpl, init, cache);
-      }
+      applyNpmOk(base, peekOkNpm(cache, npmKey));
       return base;
     }
   }
 
-  if (npm.status !== "ok") {
-    return base;
+  if (npm.status === "ok") {
+    applyNpmOk(base, npm);
   }
-
-  applyNpmOk(base, npm);
-  return continueGithub(base, npm, options, fetchImpl, init, cache);
+  return base;
 }
 
-async function continueGithub(
-  base: EnrichedDependencyRow,
-  npm: Extract<NpmLatestResult, { status: "ok" }>,
-  options: EnrichmentOptions,
-  fetchImpl: FetchLike,
-  init: RequestInit | undefined,
-  cache: EnrichmentCache<unknown> | undefined,
+/**
+ * GitHub-only path: repo summary and open issues/PRs for one Dependency whose
+ * eager enrichment found a GitHub repo. Goes through the GitHub budget and
+ * the enrichment cache; never calls npm.
+ */
+export async function enrichDependencyGithub(
+  eager: EnrichedDependencyRow,
+  options: EnrichmentOptions = {},
 ): Promise<EnrichedDependencyRow> {
-  const ownerRepo = normalizeGithubRepo(npm.repository, npm.bugsUrl);
+  const base: EnrichedDependencyRow = { ...eager };
+  const ownerRepo = base.githubRepo;
   if (!ownerRepo) {
     return base;
   }
-
-  base.githubUrl = `https://github.com/${ownerRepo}`;
-  base.issuesUrl = `${base.githubUrl}/issues`;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const cache = options.cache;
+  const init = options.signal ? { signal: options.signal } : undefined;
 
   const githubKey = enrichmentCacheKey("github", ownerRepo);
   if (cache?.getBlock(githubKey)) {
@@ -181,6 +195,12 @@ function applyNpmOk(
     return;
   }
   base.latest = npm.version;
+  const ownerRepo = normalizeGithubRepo(npm.repository, npm.bugsUrl);
+  if (ownerRepo) {
+    base.githubRepo = ownerRepo;
+    base.githubUrl = `https://github.com/${ownerRepo}`;
+    base.issuesUrl = `${base.githubUrl}/issues`;
+  }
 }
 
 function applyRateLimitedGithub(

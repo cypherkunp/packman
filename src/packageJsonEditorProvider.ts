@@ -1,14 +1,11 @@
 import * as vscode from "vscode";
 import { dirname } from "node:path";
-import {
-  enrichDependencyRow,
-  type EnrichedDependencyRow,
-} from "./enrichDependencyRow";
+import type { EnrichedDependencyRow } from "./enrichDependencyRow";
 import { handoffGitDiffToTextEditor } from "./handoffGitDiff";
 import { EnrichmentCache, ENRICHMENT_TTL_MS } from "./enrichmentCache";
+import { EnrichmentStore } from "./enrichmentStore";
 import { npmPackageUrl } from "./fetchNpmLatest";
 import { probeGithubCoreLimit } from "./fetchGithubRepoSummary";
-import { fetchSocketScoresByPurl } from "./fetchSocketScores";
 import {
   formatGithubResetClock,
   sharedGithubBudget,
@@ -23,10 +20,6 @@ import {
   renderUiModeHtml,
   type UiModeExtras,
 } from "./renderUiModeHtml";
-import {
-  applySocketEnrichment,
-  socketComponentsFromRows,
-} from "./socketColumn";
 import { resolveSocketCredentials } from "./socketCredentials";
 import { runPackageScript } from "./runPackageScript";
 
@@ -34,6 +27,12 @@ import { runPackageScript } from "./runPackageScript";
 export const enrichmentCache = new EnrichmentCache<unknown>({
   ttlMs: ENRICHMENT_TTL_MS,
 });
+
+/**
+ * Process-wide Dependency enrichment keyed by name, layered over the cache.
+ * Shared by UI mode and the Overlay so no package is fetched twice.
+ */
+export const enrichmentStore = new EnrichmentStore({ cache: enrichmentCache });
 
 export const enrichmentRefreshEmitter = new vscode.EventEmitter<void>();
 
@@ -200,49 +199,39 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
       }
       const socketCredentials = readSocketCredentials();
 
+      // UI mode keeps its eager behaviour: the eager path (npm + Socket) and
+      // then the GitHub-only path for every Dependency.
+      const eagerByName = await enrichmentStore.enrichEager(unique, {
+        socket: socketCredentials,
+        signal: abort.signal,
+        forceRefresh: refresh,
+      });
+      if (abort.signal.aborted || generation !== enrichmentGeneration) {
+        return;
+      }
       const enrichedRows = await mapPool(
         unique,
         ENRICHMENT_CONCURRENCY,
         async (row) => {
+          const eager = eagerByName.get(row.name);
           if (abort.signal.aborted) {
-            return {
-              ...row,
-              npmUrl: npmPackageUrl(row.name),
-            };
+            return eager ?? { ...row, npmUrl: npmPackageUrl(row.name) };
           }
-          return enrichDependencyRow(row, {
+          const github = await enrichmentStore.enrichGithub(row, {
             githubToken,
-            cache: enrichmentCache,
             signal: abort.signal,
             forceRefresh: refresh,
             githubBudget: sharedGithubBudget,
           });
+          return { ...github, socket: eager?.socket };
         },
         abort.signal,
       );
       if (abort.signal.aborted || generation !== enrichmentGeneration) {
         return;
       }
-
-      let socketResult = undefined;
-      if (socketCredentials.status === "ready") {
-        socketResult = await fetchSocketScoresByPurl(
-          {
-            orgSlug: socketCredentials.orgSlug,
-            apiToken: socketCredentials.apiToken,
-            components: socketComponentsFromRows(enrichedRows),
-          },
-          fetch,
-        );
-      }
-
-      const withSocket = applySocketEnrichment(
-        enrichedRows,
-        socketCredentials,
-        socketResult,
-      );
       const finalMap = new Map(
-        withSocket.map((row) => [row.name, row] as const),
+        enrichedRows.map((row) => [row.name, row] as const),
       );
 
       if (generation !== enrichmentGeneration) {
@@ -291,6 +280,7 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
     const refreshSubscription = enrichmentRefreshEmitter.event(() => {
       forceRefresh = true;
       enrichmentCache.clear();
+      enrichmentStore.clear();
       runRefresh();
     });
 
