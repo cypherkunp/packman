@@ -16,6 +16,7 @@ import {
   type OverlayRange,
 } from "./buildOverlay";
 import { formatGithubResetClock, sharedGithubBudget } from "./githubBudget";
+import { shouldFetchGithubOnHover } from "./githubOnHover";
 import { GithubPauseWatch } from "./githubPauseWatch";
 import { isOverlayTarget, overlayTargetDocuments } from "./overlayTarget";
 import {
@@ -258,7 +259,7 @@ export function registerOverlay(
         return undefined;
       }
       const cached = github.get(target.dependency);
-      if (!cached || cached.githubDegrade || cached.issuesDegrade) {
+      if (shouldFetchGithubOnHover(cached, isGithubPaused())) {
         const range =
           overlayDependencies(text).find(
             (row) => row.name === target.dependency,
