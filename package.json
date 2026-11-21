@@ -141,7 +141,7 @@
         "packman.overlay.enabled": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Show the Packman Overlay (▶ Run actions on scripts) in the `package.json` text editor. `Packman: Toggle Overlay` hides or shows it for the current session."
+          "markdownDescription": "Show the Packman Overlay in the `package.json` text editor: ▶ Run (or Trust workspace) actions on scripts, latest-version and Socket signals on each Dependency, hovers with GitHub details fetched on hover, and per-block summaries with Refresh. `Packman: Toggle Overlay` hides or shows it for the current session."
         }
       }
     }
