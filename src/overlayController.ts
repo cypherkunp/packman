@@ -5,25 +5,37 @@ import {
   isWellFormed,
   overlayDependencies,
   RUN_SCRIPT_COMMAND,
+  GITHUB_SETTINGS_COMMAND,
+  REFRESH_ENRICHMENT_COMMAND,
+  SOCKET_SETTINGS_COMMAND,
   type DependencyEnrichment,
+  type DependencyGithub,
   type OverlayContext,
   type OverlayDecoration,
   type OverlayDecorationTone,
   type OverlayRange,
 } from "./buildOverlay";
-import { sharedGithubBudget } from "./githubBudget";
+import { formatGithubResetClock, sharedGithubBudget } from "./githubBudget";
 import { isOverlayTarget } from "./overlayTarget";
 import {
   enrichmentCache,
   enrichmentRefreshEmitter,
   enrichmentStore,
 } from "./packageJsonEditorProvider";
+import { resolveGithubToken } from "./resolveGithubToken";
 import { runPackageScript } from "./runPackageScript";
 import { resolveSocketCredentials } from "./socketCredentials";
 
 const OVERLAY_SETTING = "packman.overlay.enabled";
 const SOCKET_SETTINGS = "packman.socket";
 const REFRESH_DEBOUNCE_MS = 300;
+/** How long a hover waits for GitHub before showing its loading note. */
+const HOVER_GITHUB_WAIT_MS = 1_500;
+const HOVER_COMMANDS = [
+  SOCKET_SETTINGS_COMMAND,
+  GITHUB_SETTINGS_COMMAND,
+  REFRESH_ENRICHMENT_COMMAND,
+];
 /** How often block summaries re-check whether GitHub is paused. */
 const GITHUB_PAUSE_POLL_MS = 15_000;
 /** Schemes whose documents can be edited and whose scripts can be run. */
@@ -55,16 +67,27 @@ export function registerOverlay(
     return lastGoodTexts.get(uri);
   };
 
-  const contextFor = (document: vscode.TextDocument): OverlayContext => ({
-    documentUri: document.uri.toString(),
-    lastGoodText: lastGoodText(document),
-    enabled: isEnabled(),
-    trusted: vscode.workspace.isTrusted,
-    readOnly: isReadOnly(document),
-    enrichment: known,
-    socketConfigured: socketCredentials().status === "ready",
-    githubPaused: isGithubPaused(),
-  });
+  const contextFor = (document: vscode.TextDocument): OverlayContext => {
+    const pausedUntil = sharedGithubBudget.blockedUntilMs();
+    return {
+      documentUri: document.uri.toString(),
+      lastGoodText: lastGoodText(document),
+      enabled: isEnabled(),
+      trusted: vscode.workspace.isTrusted,
+      readOnly: isReadOnly(document),
+      enrichment: known,
+      socketConfigured: socketCredentials().status === "ready",
+      githubPaused: isGithubPaused(),
+      github,
+      githubPausedUntil:
+        pausedUntil !== undefined
+          ? formatGithubResetClock(pausedUntil)
+          : undefined,
+    };
+  };
+
+  /** GitHub enrichment fetched on hover, per Dependency name. */
+  const github = new Map<string, DependencyGithub>();
 
   const socketCredentials = () => {
     const config = vscode.workspace.getConfiguration("packman");
@@ -158,6 +181,7 @@ export function registerOverlay(
     enrichAbort = new AbortController();
     known.clear();
     requested.clear();
+    github.clear();
     changed.fire();
     renderDecorations();
     enrichNewDependencies();
@@ -178,6 +202,77 @@ export function registerOverlay(
             tooltip: lens.tooltip,
           }),
       );
+    },
+  };
+
+  /**
+   * GitHub-only path for one Dependency, on hover only. The store caches
+   * loaded results and the shared budget gates every request.
+   */
+  const loadGithub = async (name: string, range: string): Promise<void> => {
+    const config = vscode.workspace.getConfiguration("packman");
+    const githubToken = await resolveGithubToken(
+      config.get<string>("github.token"),
+      (scopes) =>
+        vscode.authentication.getSession("github", scopes, { silent: true }),
+    );
+    sharedGithubBudget.setIdentity(githubToken);
+    const signal = enrichAbort.signal;
+    const enriched = await enrichmentStore.enrichGithub(
+      { name, range },
+      { githubToken, githubBudget: sharedGithubBudget, signal },
+    );
+    if (signal.aborted) {
+      return;
+    }
+    github.set(name, {
+      githubUrl: enriched.githubUrl,
+      issuesUrl: enriched.issuesUrl,
+      openIssuesCount: enriched.openIssuesCount,
+      githubDegrade: enriched.githubDegrade,
+      issuesDegrade: enriched.issuesDegrade,
+    });
+    if (!known.has(name) && (enriched.latest || enriched.latestDegrade)) {
+      known.set(name, enriched);
+      renderDecorations();
+    }
+  };
+
+  const hoverProvider: vscode.HoverProvider = {
+    async provideHover(document, position) {
+      if (!isOverlayTarget(document.uri.path)) {
+        return undefined;
+      }
+      const text = document.getText();
+      const target = buildOverlay(text, contextFor(document)).hovers.find(
+        (hover) => toRange(hover.range).contains(position),
+      );
+      if (!target) {
+        return undefined;
+      }
+      const cached = github.get(target.dependency);
+      if (!cached || cached.githubDegrade || cached.issuesDegrade) {
+        const range =
+          overlayDependencies(text).find(
+            (row) => row.name === target.dependency,
+          )?.range ?? "";
+        const loading = loadGithub(target.dependency, range).catch(
+          () => undefined,
+        );
+        await Promise.race([
+          loading,
+          new Promise((resolve) => setTimeout(resolve, HOVER_GITHUB_WAIT_MS)),
+        ]);
+      }
+      const hover = buildOverlay(text, contextFor(document)).hovers.find(
+        (entry) => entry.dependency === target.dependency,
+      );
+      if (!hover) {
+        return undefined;
+      }
+      const markdown = new vscode.MarkdownString(hover.markdown);
+      markdown.isTrusted = { enabledCommands: HOVER_COMMANDS };
+      return new vscode.Hover(markdown, toRange(hover.range));
     },
   };
 
@@ -210,6 +305,10 @@ export function registerOverlay(
     vscode.languages.registerCodeLensProvider(
       [{ pattern: "**/package.json" }],
       codeLensProvider,
+    ),
+    vscode.languages.registerHoverProvider(
+      [{ pattern: "**/package.json" }],
+      hoverProvider,
     ),
     vscode.workspace.onDidChangeTextDocument((event) => {
       if (isOverlayTarget(event.document.uri.path)) {
