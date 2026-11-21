@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isOverlayTarget, overlayTargetDocuments } from "./overlayTarget";
+import {
+  canRunScriptsFrom,
+  isOverlayTarget,
+  overlayTargetDocuments,
+} from "./overlayTarget";
 
 describe("isOverlayTarget", () => {
   it("accepts package.json files, including unsaved ones", () => {
@@ -40,5 +44,18 @@ describe("overlayTargetDocuments", () => {
       overlayTargetDocuments(documents).map((document) => document.uri.path),
       ["/work/app/package.json", "/work/lib/package.json"],
     );
+  });
+});
+
+describe("canRunScriptsFrom", () => {
+  it("allows saved and unsaved documents", () => {
+    assert.equal(canRunScriptsFrom("file"), true);
+    assert.equal(canRunScriptsFrom("untitled"), true);
+  });
+
+  it("rejects git and other virtual documents, such as a diff's old side", () => {
+    assert.equal(canRunScriptsFrom("git"), false);
+    assert.equal(canRunScriptsFrom("vscode-remote"), false);
+    assert.equal(canRunScriptsFrom("vscode-vfs"), false);
   });
 });

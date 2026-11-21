@@ -18,7 +18,11 @@ import {
 import { formatGithubResetClock, sharedGithubBudget } from "./githubBudget";
 import { shouldFetchGithubOnHover } from "./githubOnHover";
 import { GithubPauseWatch } from "./githubPauseWatch";
-import { isOverlayTarget, overlayTargetDocuments } from "./overlayTarget";
+import {
+  canRunScriptsFrom,
+  isOverlayTarget,
+  overlayTargetDocuments,
+} from "./overlayTarget";
 import {
   enrichmentRefresh,
   enrichmentStore,
@@ -39,8 +43,6 @@ const HOVER_COMMANDS = [
 ];
 /** How often, while GitHub is paused, summaries check whether it resumed. */
 const GITHUB_PAUSE_POLL_MS = 15_000;
-/** Schemes whose documents can be edited and whose scripts can be run. */
-const EDITABLE_SCHEMES = new Set(["file", "untitled", "vscode-remote"]);
 
 /**
  * Thin VS Code adapter for the Overlay: feeds documents to the pure
@@ -446,12 +448,17 @@ function packageDirFor(uri: vscode.Uri): string | undefined {
 }
 
 /**
- * Read-only when the document lives on a non-editable scheme (git, PR
- * reviews, …), on a read-only file system, or is only open as a diff side.
+ * Read-only when the document lives on a scheme whose scripts can't be run
+ * (git, PR reviews, …), on a read-only file system, or is only open as a
+ * diff side.
+ *
+ * CodeLenses are provided per document, not per editor: a diff's working-copy
+ * side is the same `file:` document as a normal tab, so while both are open
+ * it shows the same Run lenses. VS Code gives no way to tell them apart here.
  */
 function isReadOnly(document: vscode.TextDocument): boolean {
   const { uri } = document;
-  if (!EDITABLE_SCHEMES.has(uri.scheme)) {
+  if (!canRunScriptsFrom(uri.scheme)) {
     return true;
   }
   if (vscode.workspace.fs.isWritableFileSystem(uri.scheme) === false) {

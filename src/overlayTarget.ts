@@ -16,3 +16,14 @@ export function overlayTargetDocuments<T extends { uri: { path: string } }>(
 ): T[] {
   return documents.filter((document) => isOverlayTarget(document.uri.path));
 }
+
+/** URI schemes whose documents are real, runnable `package.json` files. */
+const RUNNABLE_SCHEMES = new Set(["file", "untitled"]);
+
+/**
+ * Whether Run lenses belong on a document with this URI scheme. `git:` and
+ * other virtual documents (such as a diff's old side) get none.
+ */
+export function canRunScriptsFrom(scheme: string): boolean {
+  return RUNNABLE_SCHEMES.has(scheme);
+}
