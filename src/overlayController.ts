@@ -2,6 +2,7 @@ import { dirname } from "node:path";
 import * as vscode from "vscode";
 import {
   buildOverlay,
+  isWellFormed,
   overlayDependencies,
   RUN_SCRIPT_COMMAND,
   GITHUB_SETTINGS_COMMAND,
@@ -55,10 +56,22 @@ export function registerOverlay(
     sessionOverride ??
     vscode.workspace.getConfiguration().get<boolean>(OVERLAY_SETTING, true);
 
+  /** Each document's latest well-formed text, kept while it's mid-edit. */
+  const lastGoodTexts = new Map<string, string>();
+  const lastGoodText = (document: vscode.TextDocument) => {
+    const uri = document.uri.toString();
+    const text = document.getText();
+    if (isWellFormed(text)) {
+      lastGoodTexts.set(uri, text);
+    }
+    return lastGoodTexts.get(uri);
+  };
+
   const contextFor = (document: vscode.TextDocument): OverlayContext => {
     const pausedUntil = sharedGithubBudget.blockedUntilMs();
     return {
       documentUri: document.uri.toString(),
+      lastGoodText: lastGoodText(document),
       enabled: isEnabled(),
       trusted: vscode.workspace.isTrusted,
       readOnly: isReadOnly(document),
@@ -301,6 +314,9 @@ export function registerOverlay(
       if (isOverlayTarget(event.document.uri.path)) {
         refreshSoon();
       }
+    }),
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      lastGoodTexts.delete(document.uri.toString());
     }),
     vscode.workspace.onDidGrantWorkspaceTrust(refresh),
     vscode.window.tabGroups.onDidChangeTabs(refresh),
