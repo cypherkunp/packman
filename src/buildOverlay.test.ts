@@ -605,6 +605,16 @@ describe("buildOverlay", () => {
       ]);
     });
 
+    it("keeps the other Dependencies' hovers on their lines", () => {
+      const broken = LAST_GOOD.replace('"leftpad": "^1.0.0",', '"lef');
+      assert.deepEqual(
+        buildOverlay(broken, ctx({ lastGoodText: LAST_GOOD })).hovers.map(
+          (hover) => hover.range.start.line,
+        ),
+        [6, 8],
+      );
+    });
+
     it("drops an entry whose value is broken, rather than misplacing it", () => {
       const broken = LAST_GOOD.replace('"^1.0.0",', '"^1.0.0');
       assert.deepEqual(view(broken).decorations, [
