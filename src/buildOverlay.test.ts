@@ -5,6 +5,7 @@ import {
   overlayDependencies,
   type DependencyEnrichment,
   type OverlayContext,
+  type OverlayLens,
 } from "./buildOverlay";
 
 const DOC = "file:///work/app/package.json";
@@ -18,12 +19,17 @@ const ctx = (overrides: Partial<OverlayContext> = {}): OverlayContext => ({
 });
 
 const lensSummary = (text: string, context = ctx()) =>
-  buildOverlay(text, context).lenses.map((lens) => ({
+  buildOverlay(text, context)
+    .lenses.filter((lens) => !isBlockSummaryLens(lens))
+    .map((lens) => ({
     line: lens.range.start.line,
     title: lens.title,
     command: lens.command,
     arguments: lens.arguments,
   }));
+
+const isBlockSummaryLens = (lens: OverlayLens) =>
+  lens.command === "" || lens.command === "packman.refreshEnrichment";
 
 const SAMPLE = `{
   "name": "demo",
@@ -406,6 +412,153 @@ describe("buildOverlay", () => {
         { name: "typescript", range: "~5.3.0" },
       ]);
       assert.deepEqual(overlayDependencies("[]"), []);
+    });
+  });
+
+  describe("block summary lenses", () => {
+    const BLOCKS = `{
+  "name": "demo",
+  "dependencies": {
+    "leftpad": "^1.0.0",
+    "react": "^18.2.0",
+    "@acme/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~5.3.0"
+  },
+  "peerDependencies": {}
+}`;
+
+    const summaries = (
+      text: string,
+      enrichment: Record<string, DependencyEnrichment> = {},
+      overrides: Partial<OverlayContext> = {},
+    ) =>
+      buildOverlay(
+        text,
+        ctx({ enrichment: new Map(Object.entries(enrichment)), ...overrides }),
+      )
+        .lenses.filter(isBlockSummaryLens)
+        .map((lens) => ({
+          line: lens.range.start.line,
+          title: lens.title,
+          command: lens.command,
+          arguments: lens.arguments,
+        }));
+
+    it("puts counts and ↻ Refresh above each non-empty dependency block", () => {
+      assert.deepEqual(
+        summaries(BLOCKS, {
+          leftpad: { latest: "2.1.0" },
+          react: { latest: "18.3.1" },
+          typescript: { latest: "5.6.2" },
+        }),
+        [
+          {
+            line: 2,
+            title: "3 deps · 1 outdated",
+            command: "",
+            arguments: [],
+          },
+          {
+            line: 2,
+            title: "↻ Refresh",
+            command: "packman.refreshEnrichment",
+            arguments: [],
+          },
+          {
+            line: 7,
+            title: "1 dep · 1 outdated",
+            command: "",
+            arguments: [],
+          },
+          {
+            line: 7,
+            title: "↻ Refresh",
+            command: "packman.refreshEnrichment",
+            arguments: [],
+          },
+        ],
+      );
+    });
+
+    const socket = (overall100: number, highSeverity: boolean) => ({
+      kind: "score" as const,
+      overall100,
+      highSeverity,
+      url: "https://socket.dev",
+    });
+
+    const titles = (
+      enrichment: Record<string, DependencyEnrichment>,
+      overrides: Partial<OverlayContext> = {},
+    ) =>
+      summaries(BLOCKS, enrichment, overrides)
+        .filter((lens) => lens.command === "")
+        .map((lens) => lens.title);
+
+    it("counts Socket alerts only when Socket is configured", () => {
+      const enrichment = {
+        leftpad: { latest: "1.3.0", socket: socket(40, true) },
+        react: { latest: "18.3.1", socket: socket(90, false) },
+        typescript: { latest: "5.3.3", socket: socket(30, true) },
+      };
+      assert.deepEqual(titles(enrichment), [
+        "3 deps · 0 outdated",
+        "1 dep · 0 outdated",
+      ]);
+      assert.deepEqual(titles(enrichment, { socketConfigured: true }), [
+        "3 deps · 0 outdated · 1 Socket alert",
+        "1 dep · 0 outdated · 1 Socket alert",
+      ]);
+      assert.deepEqual(
+        titles(
+          {
+            ...enrichment,
+            react: { latest: "18.3.1", socket: socket(10, true) },
+          },
+          { socketConfigured: true },
+        ),
+        [
+          "3 deps · 0 outdated · 2 Socket alerts",
+          "1 dep · 0 outdated · 1 Socket alert",
+        ],
+      );
+      assert.deepEqual(titles({}, { socketConfigured: true }), [
+        "3 deps · 0 outdated · 0 Socket alerts",
+        "1 dep · 0 outdated · 0 Socket alerts",
+      ]);
+    });
+
+    it("adds GitHub paused while the GitHub budget is blocked", () => {
+      const enrichment = {
+        leftpad: { latest: "2.1.0", socket: socket(40, true) },
+      };
+      assert.deepEqual(titles(enrichment, { githubPaused: true }), [
+        "3 deps · 1 outdated · GitHub paused",
+        "1 dep · 0 outdated · GitHub paused",
+      ]);
+      assert.deepEqual(
+        titles(enrichment, { githubPaused: true, socketConfigured: true }),
+        [
+          "3 deps · 1 outdated · 1 Socket alert · GitHub paused",
+          "1 dep · 0 outdated · 0 Socket alerts · GitHub paused",
+        ],
+      );
+      assert.deepEqual(titles(enrichment, { githubPaused: false }), [
+        "3 deps · 1 outdated",
+        "1 dep · 0 outdated",
+      ]);
+    });
+
+    it("summarises read-only views, but not a disabled Overlay or empty blocks", () => {
+      assert.equal(
+        summaries(BLOCKS, {}, { readOnly: true, trusted: false }).length,
+        4,
+      );
+      assert.deepEqual(summaries(BLOCKS, {}, { enabled: false }), []);
+      const noDeps = SAMPLE.replace(/"dependencies"[^}]*}/, '"dependencies": {}');
+      assert.deepEqual(summaries(noDeps), []);
     });
   });
 });
