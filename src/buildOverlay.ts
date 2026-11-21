@@ -63,6 +63,10 @@ export type OverlayContext = {
    * still loading and shows the pending marker.
    */
   enrichment?: ReadonlyMap<string, DependencyEnrichment>;
+  /** Socket credentials are set, so block summaries count Socket alerts. */
+  socketConfigured?: boolean;
+  /** The shared GitHub budget is blocked (rate-limited). */
+  githubPaused?: boolean;
   /**
    * GitHub enrichment loaded on hover, per Dependency name. A name with no
    * entry has not loaded yet and its hover shows a loading note.
@@ -109,6 +113,7 @@ export function buildOverlay(text: string, context: OverlayContext): Overlay {
   }
   const toRange = rangeMapper(text);
   overlay.lenses.push(...scriptLenses(root, context, toRange));
+  overlay.lenses.push(...blockSummaryLenses(root, context, toRange));
   overlay.decorations.push(...dependencyDecorations(root, context, toRange));
   overlay.hovers.push(...dependencyHovers(root, context, toRange));
   return overlay;
@@ -148,6 +153,66 @@ function dependencyNodes(root: JsonNode): DependencyNode[] {
       return [{ name: key.value, range: value.value as string, property }];
     });
   });
+}
+
+/**
+ * Above each non-empty dependency block: an informational counts lens
+ * (no command) followed by a `↻ Refresh` lens.
+ */
+function blockSummaryLenses(
+  root: JsonNode,
+  context: OverlayContext,
+  toRange: (node: JsonNode) => OverlayRange,
+): OverlayLens[] {
+  const registry = dependencyNodes(root);
+  return DEPENDENCY_BAGS.flatMap((bag) => {
+    const block = findNodeAtLocation(root, [bag]);
+    if (!block || block.type !== "object" || !block.parent) {
+      return [];
+    }
+    const entries = (block.children ?? []).filter(
+      (property) =>
+        property.type === "property" &&
+        typeof property.children?.[0]?.value === "string" &&
+        property.children?.[1]?.type === "string",
+    );
+    if (entries.length === 0) {
+      return [];
+    }
+    const inBlock = registry.filter((dependency) =>
+      entries.includes(dependency.property),
+    );
+    const outdated = inBlock.filter((dependency) => {
+      const latest = context.enrichment?.get(dependency.name)?.latest;
+      return dependencyStatus(dependency.range, latest).kind === "behind";
+    }).length;
+    const segments = [plural(entries.length, "dep"), `${outdated} outdated`];
+    if (context.socketConfigured) {
+      const alerts = inBlock.filter((dependency) => {
+        const socket = context.enrichment?.get(dependency.name)?.socket;
+        return socket?.kind === "score" && socket.highSeverity;
+      }).length;
+      segments.push(plural(alerts, "Socket alert"));
+    }
+    if (context.githubPaused) {
+      segments.push("GitHub paused");
+    }
+    const range = toRange(block.parent);
+    return [
+      { range, title: segments.join(" · "), command: "", arguments: [] },
+      {
+        range,
+        title: "↻ Refresh",
+        command: REFRESH_ENRICHMENT_COMMAND,
+        arguments: [],
+        tooltip: "Clear Packman enrichment and fetch it again",
+      },
+    ];
+  });
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 function dependencyDecorations(
