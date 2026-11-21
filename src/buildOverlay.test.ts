@@ -561,4 +561,113 @@ describe("buildOverlay", () => {
       assert.deepEqual(summaries(noDeps), []);
     });
   });
+
+  describe("while the JSON is broken mid-edit", () => {
+    const LAST_GOOD = `{
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "leftpad": "^1.0.0",
+    "typescript": "~5.3.0"
+  }
+}`;
+    const KNOWN: Record<string, DependencyEnrichment> = {
+      react: { latest: "18.2.0" },
+      leftpad: { latest: "2.1.0" },
+      typescript: { latest: "5.3.0" },
+    };
+
+    const view = (text: string, lastGoodText: string | undefined = LAST_GOOD) => {
+      const overlay = buildOverlay(
+        text,
+        ctx({ enrichment: new Map(Object.entries(KNOWN)), lastGoodText }),
+      );
+      return {
+        lenses: overlay.lenses.map((lens) => [
+          lens.range.start.line,
+          lens.title,
+        ]),
+        decorations: overlay.decorations.map((d) => [
+          d.range.start.line,
+          d.text,
+        ]),
+      };
+    };
+
+    it("keeps the other Dependencies decorated while one name is an unclosed string", () => {
+      const broken = LAST_GOOD.replace('"leftpad": "^1.0.0",', '"lef');
+      assert.deepEqual(view(broken).decorations, [
+        [6, "✓ latest"],
+        [8, "✓ latest"],
+      ]);
+    });
+
+    it("drops an entry whose value is broken, rather than misplacing it", () => {
+      const broken = LAST_GOOD.replace('"^1.0.0",', '"^1.0.0');
+      assert.deepEqual(view(broken).decorations, [
+        [6, "✓ latest"],
+        [8, "✓ latest"],
+      ]);
+    });
+
+    it("keeps only entries from the last good text, so half-typed ones stay bare", () => {
+      const broken = LAST_GOOD.replace(
+        '"typescript": "~5.3.0"',
+        '"typescript": "~5.3.0"\n    "lodash": "^4.0.0"',
+      );
+      assert.deepEqual(view(broken).decorations, [
+        [6, "✓ latest"],
+        [7, "→ 2.1.0"],
+        [8, "✓ latest"],
+      ]);
+    });
+
+    it("keeps the other scripts' Run lenses and re-counts the block summary", () => {
+      const broken = LAST_GOOD.replace('"tsc",', '"tsc,').replace(
+        '"react": "^18.2.0",',
+        '"react": "^18.2.0"',
+      );
+      assert.deepEqual(view(broken).lenses, [
+        [3, "▶ Run"],
+        [5, "3 deps · 1 outdated"],
+        [5, "↻ Refresh"],
+      ]);
+    });
+
+    it("drops entries after a block that lost its closing brace", () => {
+      const broken = LAST_GOOD.replace("  },\n  \"dependencies\"", '  \n  "dependencies"');
+      assert.deepEqual(view(broken), {
+        lenses: [
+          [2, "▶ Run"],
+          [3, "▶ Run"],
+        ],
+        decorations: [],
+      });
+    });
+
+    it("asks for no enrichment while broken, so half-typed names aren't fetched", () => {
+      const broken = LAST_GOOD.replace(
+        '"typescript": "~5.3.0"',
+        '"typescript": "~5.3.0"\n    "lod": "^4"',
+      );
+      assert.deepEqual(overlayDependencies(broken), []);
+      assert.equal(overlayDependencies(LAST_GOOD).length, 3);
+    });
+
+    it("re-renders normally once the JSON is valid again", () => {
+      const fixed = LAST_GOOD.replace(
+        '"typescript": "~5.3.0"',
+        '"typescript": "~5.3.0",\n    "lodash": "^4.0.0"',
+      );
+      assert.deepEqual(view(fixed).decorations, [
+        [6, "✓ latest"],
+        [7, "→ 2.1.0"],
+        [8, "✓ latest"],
+        [9, "…"],
+      ]);
+    });
+  });
 });
