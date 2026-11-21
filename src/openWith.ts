@@ -2,7 +2,7 @@ export const PACKMAN_VIEW_TYPE = "packman.packageJson";
 
 /**
  * Chooses the `vscode.openWith` viewId for toggling between Packman UI mode
- * and the native text Edit mode.
+ * and the native text editor.
  */
 export function resolveOpenWithViewId(
   activeCustomEditorId: string | undefined,

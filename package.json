@@ -1,7 +1,7 @@
 {
   "name": "packman",
   "displayName": "Packman",
-  "description": "Open package.json in a native-feeling UI with script runners and dependency intelligence.",
+  "description": "Script runners and dependency intelligence right inside your package.json.",
   "version": "0.0.4",
   "publisher": "cypherkunp",
   "license": "MIT",
@@ -55,13 +55,13 @@
             "filenamePattern": "**/package.json"
           }
         ],
-        "priority": "default"
+        "priority": "option"
       }
     ],
     "commands": [
       {
         "command": "packman.openEditMode",
-        "title": "Packman: Open Edit Mode",
+        "title": "Packman: Open in Text Editor",
         "icon": "$(go-to-file)"
       },
       {
@@ -131,7 +131,7 @@
         "packman.socket.apiToken": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Socket.org API token (end-user). Required together with `#packman.socket.orgSlug#` to show Socket scores on Dependency rows."
+          "markdownDescription": "Socket.org API token (end-user). Required together with `#packman.socket.orgSlug#` to show Socket scores on Dependencies."
         },
         "packman.socket.orgSlug": {
           "type": "string",

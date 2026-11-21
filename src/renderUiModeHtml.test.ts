@@ -156,13 +156,14 @@ describe("renderUiModeHtml", () => {
     assert.doesNotMatch(html, /\(rate limited\)/);
   });
 
-  it("shows a recoverable parse error with an Edit mode action at the position", () => {
+  it("shows a recoverable parse error with a text editor action at the position", () => {
     const html = renderUiModeHtml('{\n  "name": "x",\n}', "n", new Map(), {
       editShortcut: "⌘⇧M",
     });
     assert.match(html, /isn’t valid JSON/);
     assert.match(html, /data-action="edit" data-key="action-edit" data-line="3" data-column="1"/);
-    assert.match(html, /Open in Edit mode at line 3, column 1/);
+    assert.match(html, /Open in the text editor at line 3, column 1/);
+    assert.doesNotMatch(html, /Edit mode/);
     assert.doesNotMatch(html, /in JSON at position/);
   });
 
@@ -200,13 +201,14 @@ describe("renderUiModeHtml", () => {
     assert.doesNotMatch(html, /need attention|All within range/);
   });
 
-  it("shows Edit mode and Refresh controls with the keybinding", () => {
+  it("shows Text editor and Refresh controls with the keybinding", () => {
     const html = renderUiModeBody(
       JSON.stringify({ name: "demo", dependencies: { a: "^1.0.0" } }),
       new Map(),
       { editShortcut: "Ctrl+Shift+M" },
     );
-    assert.match(html, /data-action="edit"[^>]*>Edit mode <kbd>Ctrl\+Shift\+M<\/kbd>/);
+    assert.match(html, /data-action="edit"[^>]*>Text editor <kbd>Ctrl\+Shift\+M<\/kbd>/);
+    assert.doesNotMatch(html, /Edit mode/);
     assert.match(html, /data-action="refresh"/);
   });
 
@@ -215,7 +217,7 @@ describe("renderUiModeHtml", () => {
       JSON.stringify({ name: "demo", contributes: { a: 1, b: 2 }, private: true }),
     );
     assert.match(html, /<details class="field"[^>]*><summary[^>]*><span class="key">contributes<\/span><span class="shape">2 keys<\/span>/);
-    assert.match(html, /No scripts or dependencies yet/);
+    assert.match(html, /No scripts or dependencies yet\. Add them in the text editor/);
   });
 
   it("patches the page in place instead of reloading", () => {
