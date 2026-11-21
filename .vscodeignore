@@ -13,3 +13,9 @@ AGENTS.md
 CONTEXT.md
 .cursorrules
 .cursor/**
+dist/**/*.test.*
+dist/**/*.d.ts
+PRODUCT.md
+DESIGN.md
+.impeccable/**
+.github/**
