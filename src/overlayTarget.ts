@@ -9,3 +9,10 @@ export function isOverlayTarget(path: string): boolean {
   }
   return !segments.includes("node_modules");
 }
+
+/** The documents that get the Overlay, e.g. from `workspace.textDocuments`. */
+export function overlayTargetDocuments<T extends { uri: { path: string } }>(
+  documents: readonly T[],
+): T[] {
+  return documents.filter((document) => isOverlayTarget(document.uri.path));
+}

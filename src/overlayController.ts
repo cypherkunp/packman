@@ -16,7 +16,7 @@ import {
   type OverlayRange,
 } from "./buildOverlay";
 import { formatGithubResetClock, sharedGithubBudget } from "./githubBudget";
-import { isOverlayTarget } from "./overlayTarget";
+import { isOverlayTarget, overlayTargetDocuments } from "./overlayTarget";
 import {
   enrichmentCache,
   enrichmentRefreshEmitter,
@@ -137,13 +137,20 @@ export function registerOverlay(
     }
   };
 
-  /** Eager path (npm, plus Socket when configured) for names not seen yet. */
-  const enrichNewDependencies = () => {
+  /**
+   * Eager path (npm, plus Socket when configured) for names not seen yet in
+   * `documents`; visible editors by default.
+   */
+  const enrichNewDependencies = (
+    documents: readonly vscode.TextDocument[] = overlayEditors().map(
+      (editor) => editor.document,
+    ),
+  ) => {
     if (!isEnabled()) {
       return;
     }
-    const rows = overlayEditors()
-      .flatMap((editor) => overlayDependencies(editor.document.getText()))
+    const rows = documents
+      .flatMap((document) => overlayDependencies(document.getText()))
       .filter((row) => !requested.has(row.name));
     if (rows.length === 0) {
       return;
@@ -184,7 +191,9 @@ export function registerOverlay(
     github.clear();
     changed.fire();
     renderDecorations();
-    enrichNewDependencies();
+    // Every open package.json, not only visible ones, so background tabs
+    // don't come back with nothing known after a Refresh.
+    enrichNewDependencies(overlayTargetDocuments(vscode.workspace.textDocuments));
   };
 
   const codeLensProvider: vscode.CodeLensProvider = {

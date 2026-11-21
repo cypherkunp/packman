@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isOverlayTarget } from "./overlayTarget";
+import { isOverlayTarget, overlayTargetDocuments } from "./overlayTarget";
 
 describe("isOverlayTarget", () => {
   it("accepts package.json files, including unsaved ones", () => {
@@ -24,5 +24,21 @@ describe("isOverlayTarget", () => {
     assert.equal(isOverlayTarget("/work/app/package-lock.json"), false);
     assert.equal(isOverlayTarget("/work/app/my-package.json"), false);
     assert.equal(isOverlayTarget("/work/app/tsconfig.json"), false);
+  });
+});
+
+describe("overlayTargetDocuments", () => {
+  it("keeps every open package.json document, visible or not", () => {
+    const documents = [
+      { uri: { path: "/work/app/package.json" } },
+      { uri: { path: "/work/app/README.md" } },
+      { uri: { path: "/work/lib/package.json" } },
+      { uri: { path: "/work/app/node_modules/x/package.json" } },
+    ];
+
+    assert.deepEqual(
+      overlayTargetDocuments(documents).map((document) => document.uri.path),
+      ["/work/app/package.json", "/work/lib/package.json"],
+    );
   });
 });
