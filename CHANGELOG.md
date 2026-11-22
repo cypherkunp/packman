@@ -1,18 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.1.0
 
-- **`package.json` now opens in the normal text editor by default.** UI mode is still there, but opt-in: open it with the eye icon in the editor title bar, `Cmd/Ctrl+Shift+M`, or Reopen Editor With… → Packman. If you prefer UI mode as before, set it as the default with Reopen Editor With… → Configure default editor for `package.json`.
-- New Overlay in the text editor, which never changes the file:
-  - a ▶ Run action above each script, or a single "Trust workspace to run scripts" action in untrusted workspaces (diffs and `git:` views get none);
-  - a short signal at the end of each Dependency's line: `→ 2.0.0` when a newer version is out, `✓ latest`, a Socket score, or what failed;
-  - a hover on each Dependency with its latest version, npm and GitHub links, open issues + PRs and Socket score, read from what was already fetched;
-  - a summary above each dependency block (`12 deps · 2 outdated`, Socket alerts, `GitHub paused`) with a ↻ Refresh action.
+**Breaking: Packman is now Overlay-only.** `package.json` opens in the normal text editor, and Packman's information sits on top of the text instead of in a separate page. UI mode (the webview) is removed, along with **Packman: Open UI Mode**, **Packman: Open Edit Mode** and the `Cmd/Ctrl+Shift+M` keybinding. If you had made UI mode the default editor for `package.json`, Packman offers once to remove that association; it never changes your settings without the click.
 
-  Signals, including GitHub, are fetched only when you open or switch to a `package.json` (visible Dependencies first, cached for an hour), type a new Dependency, or click Refresh, which covers visible editors only. Nothing is fetched in the background or retried when GitHub resumes.
+The Overlay, which never changes the file:
 
-  Turn it off with `packman.overlay.enabled`, or hide it for the session with Packman: Toggle Overlay.
-- "Packman: Open Edit Mode" is now **Packman: Open in Text Editor**, and UI mode's Edit mode button is now **Text editor**.
+- a ▶ Run action above each script, or a single "Trust workspace to run scripts" action in untrusted workspaces (diffs and `git:` views get none);
+- a Dependency signal at the end of each Dependency's line: `✓ latest` or `↑ 19.2.0` (warning colour for a breaking jump), then open issues and the Socket score, leaving out what isn't known; non-npm Dependencies show only their source;
+- Dependency details on hover: latest version, npm and GitHub links, open issues + PRs, Socket score, and what failed;
+- a Block summary above each dependency block (`12 deps · 2 outdated`, Socket alerts, `GitHub paused`) with a ↻ Refresh action.
+
+GitHub issue counts need no setup: Packman uses the GitHub account you're signed in to in the editor, and the Block summary offers a one-click sign-in until it has access. `packman.github.token` is now only an override.
+
+Data is fetched only when you open or switch to a `package.json` (visible Dependencies first, cached for an hour), type a new Dependency, or click Refresh, which covers visible editors only. Nothing is fetched in the background or retried when GitHub resumes.
+
+Turn the Overlay off with `packman.overlay.enabled`, or hide it for the session with Packman: Toggle Overlay.
 
 ## 0.0.4
 
