@@ -103,8 +103,11 @@ describe("extension manifest", () => {
         (c) => c.command === "packman.signInToGithub",
       ),
     );
+  });
+
+  it("lists no redundant onCommand activation events", () => {
     assert.ok(
-      manifest.activationEvents?.includes("onCommand:packman.signInToGithub"),
+      !manifest.activationEvents?.some((e) => e.startsWith("onCommand:")),
     );
   });
 

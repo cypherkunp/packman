@@ -28,12 +28,7 @@
   },
   "pricing": "Free",
   "activationEvents": [
-    "onCommand:packman.openSocketSettings",
-    "onCommand:packman.openGithubSettings",
-    "onCommand:packman.signInToGithub",
-    "onCommand:packman.refreshEnrichment",
-    "onLanguage:json",
-    "onCommand:packman.toggleOverlay"
+    "onLanguage:json"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
