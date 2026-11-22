@@ -8,12 +8,15 @@
 export const RETIRED_VIEW_TYPE = "packman.packageJson";
 export const REMOVE_ASSOCIATION = "Remove association";
 
-export type AssociationScope = "global" | "workspace";
-
-export type StaleAssociationHost = {
-  readAssociations(scope: AssociationScope): Record<string, string> | undefined;
+/**
+ * Where `workbench.editorAssociations` can be set: user settings, the
+ * workspace, and each workspace folder. `Scope` is the host's own handle.
+ */
+export type StaleAssociationHost<Scope> = {
+  scopes(): readonly Scope[];
+  readAssociations(scope: Scope): Record<string, string> | undefined;
   writeAssociations(
-    scope: AssociationScope,
+    scope: Scope,
     value: Record<string, string> | undefined,
   ): Promise<void>;
   showPrompt(message: string, action: string): Promise<string | undefined>;
@@ -21,26 +24,25 @@ export type StaleAssociationHost = {
   markDismissed(): Promise<void>;
 };
 
-const SCOPES: AssociationScope[] = ["global", "workspace"];
-
-export async function promptStaleEditorAssociation(
-  host: StaleAssociationHost,
+export async function promptStaleEditorAssociation<Scope>(
+  host: StaleAssociationHost<Scope>,
 ): Promise<void> {
   if (host.wasDismissed()) {
     return;
   }
-  const stale = SCOPES.filter((scope) =>
+  const stale = host.scopes().filter((scope) =>
     hasRetiredEntry(host.readAssociations(scope)),
   );
   if (stale.length === 0) {
     return;
   }
 
+  // Shown once: an unanswered prompt never comes back either.
+  await host.markDismissed();
   const answer = await host.showPrompt(
     "Your editor associations still open package.json in a Packman editor that no longer exists. Remove that association so package.json opens in the text editor?",
     REMOVE_ASSOCIATION,
   );
-  await host.markDismissed();
   if (answer !== REMOVE_ASSOCIATION) {
     return;
   }
@@ -55,14 +57,23 @@ export async function promptStaleEditorAssociation(
 function hasRetiredEntry(
   associations: Record<string, string> | undefined,
 ): boolean {
-  return Object.values(associations ?? {}).includes(RETIRED_VIEW_TYPE);
+  return Object.entries(associations ?? {}).some(isRetiredEntry);
 }
 
 function withoutRetiredEntries(
   associations: Record<string, string>,
 ): Record<string, string> | undefined {
   const kept = Object.entries(associations).filter(
-    ([, viewType]) => viewType !== RETIRED_VIEW_TYPE,
+    (entry) => !isRetiredEntry(entry),
   );
   return kept.length > 0 ? Object.fromEntries(kept) : undefined;
+}
+
+/**
+ * Packman's own entry: a pattern for `package.json` (`package.json`, or a
+ * glob ending in `/package.json`) opened with the retired editor. Other
+ * entries that name it were written by hand and are left alone.
+ */
+function isRetiredEntry([pattern, viewType]: [string, string]): boolean {
+  return viewType === RETIRED_VIEW_TYPE && /(^|\/)package\.json$/.test(pattern);
 }

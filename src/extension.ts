@@ -1,10 +1,7 @@
 import * as vscode from "vscode";
 import { registerOverlay } from "./overlayController";
 import { enrichmentRefresh } from "./sessionState";
-import {
-  promptStaleEditorAssociation,
-  type AssociationScope,
-} from "./staleEditorAssociation";
+import { promptStaleEditorAssociation } from "./staleEditorAssociation";
 
 const STALE_ASSOCIATION_DISMISSED = "packman.staleEditorAssociationPrompted";
 
@@ -30,21 +27,33 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  void promptStaleEditorAssociation({
+  void promptStaleEditorAssociation<AssociationScope>({
+    scopes: () => [
+      { target: vscode.ConfigurationTarget.Global },
+      { target: vscode.ConfigurationTarget.Workspace },
+      ...(vscode.workspace.workspaceFolders ?? []).map((folder) => ({
+        target: vscode.ConfigurationTarget.WorkspaceFolder,
+        folder: folder.uri,
+      })),
+    ],
     readAssociations: (scope) => {
       const inspected = vscode.workspace
-        .getConfiguration("workbench")
+        .getConfiguration("workbench", scope.folder)
         .inspect<Record<string, string>>("editorAssociations");
       const value =
-        scope === "global" ? inspected?.globalValue : inspected?.workspaceValue;
+        scope.target === vscode.ConfigurationTarget.Global
+          ? inspected?.globalValue
+          : scope.target === vscode.ConfigurationTarget.Workspace
+            ? inspected?.workspaceValue
+            : inspected?.workspaceFolderValue;
       return value && typeof value === "object" && !Array.isArray(value)
         ? value
         : undefined;
     },
     writeAssociations: async (scope, value) => {
       await vscode.workspace
-        .getConfiguration("workbench")
-        .update("editorAssociations", value, configurationTarget(scope));
+        .getConfiguration("workbench", scope.folder)
+        .update("editorAssociations", value, scope.target);
     },
     showPrompt: (message, action) =>
       Promise.resolve(vscode.window.showInformationMessage(message, action)),
@@ -59,10 +68,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {}
 
-function configurationTarget(
-  scope: AssociationScope,
-): vscode.ConfigurationTarget {
-  return scope === "global"
-    ? vscode.ConfigurationTarget.Global
-    : vscode.ConfigurationTarget.Workspace;
-}
+/** A settings level `workbench.editorAssociations` can be set at. */
+type AssociationScope = {
+  target: vscode.ConfigurationTarget;
+  /** The workspace folder, for `WorkspaceFolder`. */
+  folder?: vscode.Uri;
+};
