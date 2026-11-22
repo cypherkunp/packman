@@ -73,7 +73,8 @@ export class SignalFetchPolicy {
 
   /**
    * A `package.json` was edited (after the debounce): only Dependency names
-   * never fetched before are fetched. Expired ones wait until shown again.
+   * never fetched before are fetched. Expired or failed ones wait until the
+   * file is shown again, or Refresh.
    */
   async edited(document: ShownDocument): Promise<void> {
     const rows = overlayDependenciesVisibleFirst(
@@ -150,10 +151,6 @@ export class SignalFetchPolicy {
     }
     for (const [name, row] of eager) {
       this.enrichmentByName.set(name, enrichmentOf(row));
-      // Let the next edit retry a lookup that failed outright.
-      if (!row.latest && row.latestDegrade) {
-        this.requested.delete(name);
-      }
     }
     this.options.onChange();
 

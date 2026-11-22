@@ -188,15 +188,19 @@ describe("SignalFetchPolicy", () => {
     assert.equal(world.policy.github.get("delta")?.openIssuesCount, 5);
   });
 
-  it("lets the next edit retry an npm lookup that failed outright", async () => {
+  it("retries a failed npm lookup on Refresh, never on the next edit", async () => {
     const world = setup();
     world.setOffline(true);
     await world.policy.shown([{ text: OTHER }]);
     assert.equal(world.policy.enrichment.get("delta")?.latestDegrade, "offline");
+    const before = world.calls.length;
 
     world.setOffline(false);
     await world.policy.edited({ text: OTHER });
+    assert.equal(world.calls.length, before);
+    assert.equal(world.policy.enrichment.get("delta")?.latestDegrade, "offline");
 
+    await world.policy.refresh([{ text: OTHER }]);
     assert.equal(world.policy.enrichment.get("delta")?.latest, "1.0.0");
   });
 });
