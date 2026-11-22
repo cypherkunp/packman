@@ -1,7 +1,7 @@
 {
   "name": "packman",
   "displayName": "Packman",
-  "description": "Open package.json in a native-feeling UI with script runners and dependency intelligence.",
+  "description": "Script runners and dependency intelligence right inside your package.json.",
   "version": "0.0.4",
   "publisher": "cypherkunp",
   "license": "MIT",
@@ -34,8 +34,16 @@
     "onCommand:packman.openUiMode",
     "onCommand:packman.openSocketSettings",
     "onCommand:packman.openGithubSettings",
-    "onCommand:packman.refreshEnrichment"
+    "onCommand:packman.refreshEnrichment",
+    "onLanguage:json",
+    "onCommand:packman.toggleOverlay"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In untrusted workspaces Packman shows its Overlay but does not offer to run scripts."
+    }
+  },
   "main": "./dist/extension.js",
   "contributes": {
     "customEditors": [
@@ -47,13 +55,13 @@
             "filenamePattern": "**/package.json"
           }
         ],
-        "priority": "default"
+        "priority": "option"
       }
     ],
     "commands": [
       {
         "command": "packman.openEditMode",
-        "title": "Packman: Open Edit Mode",
+        "title": "Packman: Open in Text Editor",
         "icon": "$(go-to-file)"
       },
       {
@@ -73,6 +81,10 @@
         "command": "packman.refreshEnrichment",
         "title": "Packman: Refresh Enrichment",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "packman.toggleOverlay",
+        "title": "Packman: Toggle Overlay"
       }
     ],
     "menus": {
@@ -119,12 +131,17 @@
         "packman.socket.apiToken": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Socket.org API token (end-user). Required together with `#packman.socket.orgSlug#` to show Socket scores on Dependency rows."
+          "markdownDescription": "Socket.org API token (end-user). Required together with `#packman.socket.orgSlug#` to show Socket scores on Dependencies."
         },
         "packman.socket.orgSlug": {
           "type": "string",
           "default": "",
           "markdownDescription": "Socket organization slug for `POST /orgs/{org}/purl`. Required together with `#packman.socket.apiToken#`."
+        },
+        "packman.overlay.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show the Packman Overlay in the `package.json` text editor: ▶ Run (or Trust workspace) actions on scripts, latest-version and Socket signals on each Dependency, hovers with GitHub details fetched on hover, and per-block summaries with Refresh. `Packman: Toggle Overlay` hides or shows it for the current session."
         }
       }
     }
@@ -150,5 +167,8 @@
     "@types/vscode": "^1.85.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
   }
 }

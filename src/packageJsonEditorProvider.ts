@@ -1,14 +1,9 @@
 import * as vscode from "vscode";
 import { dirname } from "node:path";
-import {
-  enrichDependencyRow,
-  type EnrichedDependencyRow,
-} from "./enrichDependencyRow";
+import type { EnrichedDependencyRow } from "./enrichDependencyRow";
 import { handoffGitDiffToTextEditor } from "./handoffGitDiff";
-import { EnrichmentCache, ENRICHMENT_TTL_MS } from "./enrichmentCache";
 import { npmPackageUrl } from "./fetchNpmLatest";
 import { probeGithubCoreLimit } from "./fetchGithubRepoSummary";
-import { fetchSocketScoresByPurl } from "./fetchSocketScores";
 import {
   formatGithubResetClock,
   sharedGithubBudget,
@@ -24,21 +19,11 @@ import {
   type UiModeExtras,
 } from "./renderUiModeHtml";
 import {
-  applySocketEnrichment,
-  socketComponentsFromRows,
-} from "./socketColumn";
+  enrichmentRefresh,
+  enrichmentStore,
+} from "./sessionState";
 import { resolveSocketCredentials } from "./socketCredentials";
-import { runPackageScript } from "./runPackageScript";
-
-/** Shared across Packman UI mode editors for the extension host lifetime. */
-export const enrichmentCache = new EnrichmentCache<unknown>({
-  ttlMs: ENRICHMENT_TTL_MS,
-});
-
-export const enrichmentRefreshEmitter = new vscode.EventEmitter<void>();
-
-/** Package dirs already warned about lockfile fallback (session-scoped). */
-const scriptFallbackWarnedDirs = new Set<string>();
+import { runScriptFromEditor } from "./runScriptFromEditor";
 
 export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvider {
   public static register(): vscode.Disposable {
@@ -199,49 +184,39 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
       }
       const socketCredentials = readSocketCredentials();
 
+      // UI mode keeps its eager behaviour: the eager path (npm + Socket) and
+      // then the GitHub-only path for every Dependency.
+      const eagerByName = await enrichmentStore.enrichEager(unique, {
+        socket: socketCredentials,
+        signal: abort.signal,
+        forceRefresh: refresh,
+      });
+      if (abort.signal.aborted || generation !== enrichmentGeneration) {
+        return;
+      }
       const enrichedRows = await mapPool(
         unique,
         ENRICHMENT_CONCURRENCY,
         async (row) => {
+          const eager = eagerByName.get(row.name);
           if (abort.signal.aborted) {
-            return {
-              ...row,
-              npmUrl: npmPackageUrl(row.name),
-            };
+            return eager ?? { ...row, npmUrl: npmPackageUrl(row.name) };
           }
-          return enrichDependencyRow(row, {
+          const github = await enrichmentStore.enrichGithub(row, {
             githubToken,
-            cache: enrichmentCache,
             signal: abort.signal,
             forceRefresh: refresh,
             githubBudget: sharedGithubBudget,
           });
+          return { ...github, socket: eager?.socket };
         },
         abort.signal,
       );
       if (abort.signal.aborted || generation !== enrichmentGeneration) {
         return;
       }
-
-      let socketResult = undefined;
-      if (socketCredentials.status === "ready") {
-        socketResult = await fetchSocketScoresByPurl(
-          {
-            orgSlug: socketCredentials.orgSlug,
-            apiToken: socketCredentials.apiToken,
-            components: socketComponentsFromRows(enrichedRows),
-          },
-          fetch,
-        );
-      }
-
-      const withSocket = applySocketEnrichment(
-        enrichedRows,
-        socketCredentials,
-        socketResult,
-      );
       const finalMap = new Map(
-        withSocket.map((row) => [row.name, row] as const),
+        enrichedRows.map((row) => [row.name, row] as const),
       );
 
       if (generation !== enrichmentGeneration) {
@@ -287,9 +262,8 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
       }
     });
 
-    const refreshSubscription = enrichmentRefreshEmitter.event(() => {
+    const refreshSubscription = enrichmentRefresh.onRefresh(() => {
       forceRefresh = true;
-      enrichmentCache.clear();
       runRefresh();
     });
 
@@ -323,20 +297,7 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
         if (typeof script !== "string" || script.length === 0) {
           return;
         }
-        const packageDir = dirname(document.uri.fsPath);
-        runPackageScript(packageDir, script, {
-          findTerminal: (name) =>
-            vscode.window.terminals.find((t) => t.name === name),
-          createTerminal: (options) =>
-            vscode.window.createTerminal({
-              name: options.name,
-              cwd: options.cwd,
-            }),
-          warn: (text) => {
-            void vscode.window.showWarningMessage(text);
-          },
-          warnedDirs: scriptFallbackWarnedDirs,
-        });
+        runScriptFromEditor(dirname(document.uri.fsPath), script);
       },
     );
 
