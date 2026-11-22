@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted (partially superseded by ADR 0002)
 ---
 
 # Overlay the text editor instead of a default custom editor
