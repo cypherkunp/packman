@@ -89,11 +89,15 @@ export type OverlayContext = {
 /** The GitHub-only enrichment a Dependency hover reads. */
 export type { DependencyGithub };
 
-/** The eager enrichment a Dependency decoration reads. */
+/**
+ * The enrichment a Dependency signal reads: npm latest, Socket, and the
+ * GitHub open issues + PRs count. `issuesPaused` is set while the GitHub
+ * budget kept this Dependency's count from being fetched.
+ */
 export type DependencyEnrichment = Pick<
   EnrichedDependencyRow,
-  "latest" | "latestDegrade" | "socket"
->;
+  "latest" | "latestDegrade" | "socket" | "openIssuesCount"
+> & { issuesPaused?: boolean };
 
 export const RUN_SCRIPT_COMMAND = "packman.runScript";
 export const MANAGE_TRUST_COMMAND = "workbench.trust.manage";
@@ -135,6 +139,35 @@ export function overlayDependencies(text: string): DependencyRow[] {
     return [];
   }
   return dependencyNodes(root).map(({ name, range }) => ({ name, range }));
+}
+
+/** Inclusive start and exclusive end lines, like an editor's visible range. */
+export type OverlayLineRange = { start: number; end: number };
+
+/**
+ * `overlayDependencies`, with the Dependencies whose entry starts inside one
+ * of `visibleRanges` moved to the front (document order kept within each
+ * part), so what is on screen is fetched first.
+ */
+export function overlayDependenciesVisibleFirst(
+  text: string,
+  visibleRanges: readonly OverlayLineRange[] = [],
+): DependencyRow[] {
+  const root = parseWellFormed(text);
+  if (root?.type !== "object") {
+    return [];
+  }
+  const toRange = rangeMapper(text);
+  const visible: DependencyRow[] = [];
+  const rest: DependencyRow[] = [];
+  for (const { name, range, property } of dependencyNodes(root)) {
+    const line = toRange(property).start.line;
+    const onScreen = visibleRanges.some(
+      (visibleRange) => line >= visibleRange.start && line < visibleRange.end,
+    );
+    (onScreen ? visible : rest).push({ name, range });
+  }
+  return [...visible, ...rest];
 }
 
 function dependencyNodes(root: JsonNode): DependencyNode[] {
