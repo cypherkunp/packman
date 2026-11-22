@@ -2,7 +2,7 @@
   "name": "packman",
   "displayName": "Packman",
   "description": "Script runners and dependency intelligence right inside your package.json.",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "publisher": "cypherkunp",
   "license": "MIT",
   "engines": {
