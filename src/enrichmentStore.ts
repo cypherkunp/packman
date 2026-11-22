@@ -30,6 +30,8 @@ export type EagerEnrichmentOptions = {
   signal?: AbortSignal;
   /** Bypass stored and cached results (the Refresh command). */
   forceRefresh?: boolean;
+  /** Re-fetch Socket scores even for rows that have one (settings changed). */
+  forceSocket?: boolean;
 };
 
 export type GithubEnrichmentOptions = {
@@ -232,12 +234,10 @@ export class EnrichmentStore {
     if (credentials.status === "missing") {
       return applySocketEnrichment(rows, credentials, undefined);
     }
-    const settled = rows.filter(
-      (row) => row.socket && row.socket.kind !== "cta",
-    );
-    const unsettled = rows.filter(
-      (row) => !row.socket || row.socket.kind === "cta",
-    );
+    const isSettled = (row: EnrichedDependencyRow) =>
+      !options.forceSocket && row.socket !== undefined && row.socket.kind !== "cta";
+    const settled = rows.filter(isSettled);
+    const unsettled = rows.filter((row) => !isSettled(row));
     if (unsettled.length === 0) {
       return rows;
     }

@@ -92,10 +92,28 @@ export class SignalFetchPolicy {
     await this.fetch(rowsOf(documents), { forceRefresh: true });
   }
 
-  /** Socket settings changed: re-read the given (visible) editors only. */
+  /**
+   * Socket settings changed: re-fetch Socket scores for the given (visible)
+   * editors only. npm and GitHub results stay.
+   */
   async socketChanged(documents: readonly ShownDocument[]): Promise<void> {
-    this.reset();
-    await this.fetch(rowsOf(documents));
+    const rows = uniqueByName(rowsOf(documents));
+    if (rows.length === 0) {
+      return;
+    }
+    const signal = this.abort.signal;
+    const eager = await this.options.store.enrichEager(rows, {
+      signal,
+      socket: this.options.socket(),
+      forceSocket: true,
+    });
+    if (signal.aborted) {
+      return;
+    }
+    for (const [name, row] of eager) {
+      this.enrichmentByName.set(name, enrichmentOf(row));
+    }
+    this.options.onChange();
   }
 
   /**

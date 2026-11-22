@@ -204,6 +204,22 @@ describe("SignalFetchPolicy", () => {
     assert.doesNotMatch(socketBody, /alpha/);
   });
 
+  it("re-fetches Socket scores when its settings change, even if already scored", async () => {
+    let socket: SocketCredentials = { status: "ready", apiToken: "t1", orgSlug: "acme" };
+    const world = setup({ socket: () => socket });
+    await world.policy.shown([{ text: OTHER }]);
+    assert.equal(world.socketCalls(), 1);
+    const npmBefore = world.npmCalls().length;
+    const githubBefore = world.githubCalls().length;
+
+    socket = { status: "ready", apiToken: "t2", orgSlug: "acme" };
+    await world.policy.socketChanged([{ text: OTHER }]);
+
+    assert.equal(world.socketCalls(), 2);
+    assert.equal(world.npmCalls().length, npmBefore);
+    assert.equal(world.githubCalls().length, githubBefore);
+  });
+
   it("hovers read what was fetched and fetch only a never-fetched Dependency", async () => {
     const world = setup();
     await world.policy.shown([{ text: PACKAGE }]);
