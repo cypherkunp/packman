@@ -71,7 +71,7 @@ type GithubCache = Awaited<ReturnType<typeof fetchGithubRepoSummary>>;
 
 /**
  * Full enrichment: the eager path followed by the GitHub-only path.
- * UI mode uses this to keep its eager behaviour.
+ * The Overlay runs the two paths separately; this composes them in one call.
  */
 export async function enrichDependencyRow(
   row: DependencyRow,
