@@ -9,8 +9,7 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other",
-    "Visualization"
+    "Other"
   ],
   "keywords": [
     "package.json",
@@ -88,7 +87,7 @@
         "packman.overlay.enabled": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Show the Packman Overlay in the `package.json` text editor: ▶ Run (or Trust workspace) actions on scripts, latest-version and Socket signals on each Dependency, hovers with GitHub details fetched on hover, and per-block summaries with Refresh. `Packman: Toggle Overlay` hides or shows it for the current session."
+          "markdownDescription": "Show the Packman Overlay in the `package.json` text editor: a ▶ Run action on each script (or one Trust workspace action), a Dependency signal beside each Dependency (latest version, open issues and Socket score), Dependency details on hover, and a Block summary with Refresh above each dependency block. Signals are fetched when you open a `package.json`, type a new Dependency or click Refresh, and cached for an hour. `Packman: Toggle Overlay` hides or shows the Overlay for the current session."
         }
       }
     }

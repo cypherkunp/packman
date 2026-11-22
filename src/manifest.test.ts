@@ -9,6 +9,7 @@ const manifest = JSON.parse(
   readFileSync(join(root, "package.json"), "utf8"),
 ) as {
   description: string;
+  categories: string[];
   engines: { vscode: string };
   contributes: {
     customEditors?: unknown;
@@ -28,7 +29,10 @@ const manifest = JSON.parse(
     };
   };
   capabilities?: {
-    untrustedWorkspaces?: { supported?: boolean | string };
+    untrustedWorkspaces?: {
+      supported?: boolean | string;
+      description?: string;
+    };
   };
   activationEvents?: string[];
 };
@@ -71,6 +75,11 @@ describe("extension manifest", () => {
 
   it("describes Packman as living inside the package.json text editor", () => {
     assert.match(manifest.description, /right inside your package\.json/);
+  });
+
+  it("lists categories that fit an editor Overlay, not Visualization", () => {
+    assert.ok(!manifest.categories.includes("Visualization"));
+    assert.ok(manifest.categories.length > 0);
   });
 
   it("targets a Cursor-compatible VS Code engine floor", () => {
@@ -122,6 +131,29 @@ describe("extension manifest", () => {
         (c) => c.command === "packman.toggleOverlay",
       ),
     );
+  });
+
+  it("describes the Overlay setting with the current fetch policy", () => {
+    const description =
+      manifest.contributes.configuration?.properties?.[
+        "packman.overlay.enabled"
+      ]?.markdownDescription ?? "";
+    assert.match(description, /fetched when you open/);
+    assert.doesNotMatch(description, /fetched on hover/);
+  });
+
+  it("mentions no retired term in user-facing manifest copy", () => {
+    const copy = [
+      manifest.description,
+      manifest.capabilities?.untrustedWorkspaces?.description ?? "",
+      ...manifest.contributes.commands.map((c) => c.title),
+      ...Object.values(manifest.contributes.configuration?.properties ?? {}).map(
+        (p) => p.markdownDescription ?? "",
+      ),
+    ];
+    for (const text of copy) {
+      assert.doesNotMatch(text, /UI mode|Edit mode|Script button/i, text);
+    }
   });
 
   it("runs with limited support in untrusted workspaces so the trust lens can show", () => {
