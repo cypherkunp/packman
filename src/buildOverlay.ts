@@ -47,6 +47,8 @@ export type OverlayDecorationTone =
  * Theme colour per tone (VS Code `ThemeColor` ids only). Outdated escalates
  * from info to warning for a major jump; a risky Socket score is an error;
  * paused, source and degraded parts are dimmed.
+ *
+ * Specified in DESIGN.md, "Tones and theme colours": change both together.
  */
 export const OVERLAY_TONE_COLORS: Record<OverlayDecorationTone, string> = {
   latest: "editorCodeLens.foreground",
@@ -426,7 +428,11 @@ const DEGRADE_LABEL: Record<CellDegrade, string> = {
 
 type DependencySignal = { text: string; tone: OverlayDecorationTone };
 
-/** When parts disagree, the line takes the most urgent part's tone. */
+/**
+ * When parts disagree, the line takes the most urgent part's tone.
+ * Specified in DESIGN.md, "Dependency signal (decoration)": change both
+ * together.
+ */
 const TONE_PRIORITY: readonly OverlayDecorationTone[] = [
   "risk",
   "outdated-major",
