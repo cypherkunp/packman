@@ -17,7 +17,7 @@ Packman never writes to your `package.json`; every change is one you make in the
 
 ## GitHub issue counts, with no setup
 
-Packman uses the GitHub account you're signed in to in the editor (Accounts menu), which allows 5,000 requests an hour. Until Packman has access, each Block summary shows **Sign in to GitHub for issue counts**; click it once to approve access in the editor's own prompt. Without access GitHub allows 60 requests an hour, and when that runs out the signal shows `issues ⏸` until you next open the file, type a Dependency or click Refresh. A token in `packman.github.token` is only needed to use a different account.
+Packman uses the GitHub account you're signed in to in the editor (Accounts menu), which allows 5,000 requests an hour. Until Packman has access, each Block summary shows **Sign in to GitHub for issue counts**; click it once to approve access in the editor's own prompt. Without access GitHub allows 60 requests an hour, and when that runs out the signal shows `issues ⏸` until you next open the file or click Refresh. A token in `packman.github.token` is only needed to use a different account.
 
 ## When data is fetched
 
