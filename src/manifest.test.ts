@@ -21,7 +21,10 @@ const manifest = JSON.parse(
       when: string;
     }>;
     configuration?: {
-      properties?: Record<string, { type?: string; default?: unknown }>;
+      properties?: Record<
+        string,
+        { type?: string; default?: unknown; markdownDescription?: string }
+      >;
     };
   };
   capabilities?: {
@@ -74,10 +77,26 @@ describe("extension manifest", () => {
     assert.match(manifest.engines.vscode, /^\^1\.(8[5-9]|9\d|\d{3,})\./);
   });
 
-  it("contributes optional packman.github.token setting", () => {
+  it("contributes packman.github.token as an override that needs no setup", () => {
     const token =
       manifest.contributes.configuration?.properties?.["packman.github.token"];
     assert.equal(token?.type, "string");
+    assert.equal(token?.default, "");
+    assert.match(
+      token?.markdownDescription ?? "",
+      /No setup is needed when you're signed in to GitHub in the editor/,
+    );
+  });
+
+  it("contributes the GitHub sign-in command the Block summary offers", () => {
+    assert.ok(
+      manifest.contributes.commands.some(
+        (c) => c.command === "packman.signInToGithub",
+      ),
+    );
+    assert.ok(
+      manifest.activationEvents?.includes("onCommand:packman.signInToGithub"),
+    );
   });
 
   it("contributes Socket end-user token settings", () => {

@@ -7,12 +7,14 @@ import {
   RUN_SCRIPT_COMMAND,
   GITHUB_SETTINGS_COMMAND,
   REFRESH_ENRICHMENT_COMMAND,
+  SIGN_IN_TO_GITHUB_COMMAND,
   SOCKET_SETTINGS_COMMAND,
   type OverlayContext,
   type OverlayDecoration,
   type OverlayDecorationTone,
   type OverlayRange,
 } from "./buildOverlay";
+import { GithubAccess } from "./githubAccess";
 import { formatGithubResetClock, sharedGithubBudget } from "./githubBudget";
 import { GithubPauseWatch } from "./githubPauseWatch";
 import { isWellFormed } from "./overlayTree";
@@ -21,7 +23,6 @@ import {
   enrichmentRefresh,
   enrichmentStore,
 } from "./sessionState";
-import { resolveGithubToken } from "./resolveGithubToken";
 import { runScriptFromEditor } from "./runScriptFromEditor";
 import { SignalFetchPolicy, type ShownDocument } from "./signalFetchPolicy";
 import { resolveSocketCredentials } from "./socketCredentials";
@@ -79,6 +80,7 @@ export function registerOverlay(): vscode.Disposable {
       enrichment: policy.enrichment,
       socketConfigured: socketCredentials().status === "ready",
       githubPaused: isGithubPaused(),
+      githubAccess: githubAccess.hasAccess,
       github: policy.github,
       githubPausedUntil:
         pausedUntil !== undefined
@@ -133,6 +135,24 @@ export function registerOverlay(): vscode.Disposable {
   };
 
   /**
+   * GitHub access needs no setup: the token setting, else the editor's
+   * signed-in account. Only the Block summary's sign-in click prompts; a
+   * granted session re-fetches the visible editors, like Refresh.
+   */
+  const githubAccess = new GithubAccess({
+    configuredToken: () =>
+      vscode.workspace.getConfiguration("packman").get<string>("github.token"),
+    getSession: (scopes, { interactive }) =>
+      vscode.authentication.getSession(
+        "github",
+        scopes,
+        interactive ? { createIfNone: true } : { silent: true },
+      ),
+    onGranted: () => enrichmentRefresh.refresh(),
+    onChange: () => changed.fire(),
+  });
+
+  /**
    * Signals are fetched strictly on user action (ADR 0002): an editor is
    * shown, a Dependency is typed, Refresh, or a Socket settings change.
    */
@@ -141,12 +161,7 @@ export function registerOverlay(): vscode.Disposable {
     store: enrichmentStore,
     budget: sharedGithubBudget,
     socket: socketCredentials,
-    githubToken: () => {
-      const config = vscode.workspace.getConfiguration("packman");
-      return resolveGithubToken(config.get<string>("github.token"), (scopes) =>
-        vscode.authentication.getSession("github", scopes, { silent: true }),
-      );
-    },
+    githubToken: () => githubAccess.token(),
     onChange: () => {
       renderTimer ??= setTimeout(() => {
         renderTimer = undefined;
@@ -309,6 +324,14 @@ export function registerOverlay(): vscode.Disposable {
       }
       if (event.affectsConfiguration(SOCKET_SETTINGS)) {
         whenEnabled(() => policy.socketChanged(visibleDocuments()));
+      }
+    }),
+    vscode.commands.registerCommand(SIGN_IN_TO_GITHUB_COMMAND, () =>
+      githubAccess.signIn(),
+    ),
+    vscode.authentication.onDidChangeSessions((event) => {
+      if (event.provider.id === "github") {
+        void githubAccess.sessionsChanged().catch(() => undefined);
       }
     }),
     vscode.commands.registerCommand("packman.toggleOverlay", () => {

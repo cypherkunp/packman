@@ -25,11 +25,6 @@ export function activate(context: vscode.ExtensionContext): void {
         "packman.github.token",
       );
     }),
-    vscode.authentication.onDidChangeSessions((event) => {
-      if (event.provider.id === "github") {
-        enrichmentRefresh.refresh();
-      }
-    }),
     vscode.commands.registerCommand("packman.refreshEnrichment", () => {
       enrichmentRefresh.refresh();
     }),

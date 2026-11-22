@@ -35,7 +35,7 @@ Packman never writes to your `package.json`; every change is one you make in the
 
 | Setting | Purpose |
 |---|---|
-| `packman.github.token` | Optional GitHub token for issue counts. When empty, Packman uses the GitHub account you are signed in with. Without either, GitHub allows 60 requests an hour, which one `package.json` can use up; with one, the limit is 5,000. Public repo metadata needs no scopes. |
+| `packman.github.token` | Advanced override for issue counts. No setup is needed when you're signed in to GitHub in the editor: Packman uses that account (5,000 requests an hour). Until it has access, each Block summary offers **Sign in to GitHub**, which opens the editor's consent prompt; without access GitHub allows 60 requests an hour, which one `package.json` can use up. Public repo metadata needs no scopes. |
 | `packman.socket.apiToken` | Socket.dev API token. Set it with `packman.socket.orgSlug` to show Socket scores. |
 | `packman.socket.orgSlug` | Your Socket organization slug. |
 | `packman.overlay.enabled` | Show the Overlay (Run actions, Dependency signals and hovers, block summaries) in the `package.json` text editor (default on). |
