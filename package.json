@@ -31,6 +31,7 @@
   "activationEvents": [
     "onCommand:packman.openSocketSettings",
     "onCommand:packman.openGithubSettings",
+    "onCommand:packman.signInToGithub",
     "onCommand:packman.refreshEnrichment",
     "onLanguage:json",
     "onCommand:packman.toggleOverlay"
@@ -53,6 +54,10 @@
         "title": "Packman: Open GitHub Settings"
       },
       {
+        "command": "packman.signInToGithub",
+        "title": "Packman: Sign in to GitHub"
+      },
+      {
         "command": "packman.refreshEnrichment",
         "title": "Packman: Refresh Enrichment",
         "icon": "$(refresh)"
@@ -68,7 +73,7 @@
         "packman.github.token": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional GitHub token for Dependency issue counts. When empty, Packman uses the GitHub account signed in to the editor (Accounts menu). Without either, GitHub allows 60 requests/hour per IP — one package.json can exhaust that, and issue counts pause until the window resets. A token or signed-in account raises the limit to 5,000/hour. Public repo metadata needs no scopes."
+          "markdownDescription": "Advanced override: a GitHub token for Dependency issue counts. No setup is needed when you're signed in to GitHub in the editor (Accounts menu): Packman uses that account, which allows 5,000 requests/hour. Until Packman has access, each Block summary offers **Sign in to GitHub**; without access GitHub allows only 60 requests/hour per IP, and issue counts pause when that runs out. Set a token here only to use a different account. Public repo metadata needs no scopes."
         },
         "packman.socket.apiToken": {
           "type": "string",

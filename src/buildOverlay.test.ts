@@ -30,7 +30,9 @@ const lensSummary = (text: string, context = ctx()) =>
   }));
 
 const isBlockSummaryLens = (lens: OverlayLens) =>
-  lens.command === "" || lens.command === "packman.refreshEnrichment";
+  lens.command === "" ||
+  lens.command === "packman.refreshEnrichment" ||
+  lens.command === "packman.signInToGithub";
 
 const SAMPLE = `{
   "name": "demo",
@@ -647,6 +649,49 @@ describe("buildOverlay", () => {
       assert.deepEqual(titles(enrichment, { githubPaused: false }), [
         "3 deps · 1 outdated",
         "1 dep · 0 outdated",
+      ]);
+    });
+
+    const actions = (overrides: Partial<OverlayContext>) =>
+      summaries(BLOCKS, {}, overrides)
+        .filter((lens) => lens.line === 2 && lens.command !== "")
+        .map((lens) => [lens.title, lens.command]);
+
+    it("offers no sign-in while GitHub access is present or not yet known", () => {
+      const refreshOnly = [["↻ Refresh", "packman.refreshEnrichment"]];
+      assert.deepEqual(actions({ githubAccess: true }), refreshOnly);
+      assert.deepEqual(actions({}), refreshOnly);
+      assert.deepEqual(
+        actions({ githubAccess: true, githubPaused: true }),
+        refreshOnly,
+      );
+    });
+
+    it("offers a GitHub sign-in in each block while Packman has no GitHub access", () => {
+      assert.deepEqual(actions({ githubAccess: false }), [
+        ["Sign in to GitHub for issue counts", "packman.signInToGithub"],
+        ["↻ Refresh", "packman.refreshEnrichment"],
+      ]);
+      assert.equal(
+        summaries(BLOCKS, {}, { githubAccess: false }).filter(
+          (lens) => lens.command === "packman.signInToGithub",
+        ).length,
+        2,
+      );
+      assert.deepEqual(titles({}, { githubAccess: false }), [
+        "3 deps · 0 outdated",
+        "1 dep · 0 outdated",
+      ]);
+    });
+
+    it("reads GitHub paused · Sign in to GitHub while paused without access", () => {
+      assert.deepEqual(titles({}, { githubAccess: false, githubPaused: true }), [
+        "3 deps · 0 outdated · GitHub paused",
+        "1 dep · 0 outdated · GitHub paused",
+      ]);
+      assert.deepEqual(actions({ githubAccess: false, githubPaused: true }), [
+        ["Sign in to GitHub", "packman.signInToGithub"],
+        ["↻ Refresh", "packman.refreshEnrichment"],
       ]);
     });
 

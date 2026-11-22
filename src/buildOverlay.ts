@@ -94,6 +94,12 @@ export type OverlayContext = {
   /** The shared GitHub budget is blocked (rate-limited). */
   githubPaused?: boolean;
   /**
+   * Packman has GitHub access (a token setting or the editor's signed-in
+   * account). `false` adds a sign-in action to block summaries; `undefined`
+   * (not resolved yet) adds nothing.
+   */
+  githubAccess?: boolean;
+  /**
    * GitHub enrichment loaded on hover, per Dependency name. A name with no
    * entry has not loaded yet and its hover shows a loading note.
    */
@@ -121,6 +127,7 @@ export const MANAGE_TRUST_COMMAND = "workbench.trust.manage";
 export const SOCKET_SETTINGS_COMMAND = "packman.openSocketSettings";
 export const GITHUB_SETTINGS_COMMAND = "packman.openGithubSettings";
 export const REFRESH_ENRICHMENT_COMMAND = "packman.refreshEnrichment";
+export const SIGN_IN_TO_GITHUB_COMMAND = "packman.signInToGithub";
 
 export function emptyOverlay(): Overlay {
   return { lenses: [], decorations: [], hovers: [] };
@@ -214,7 +221,8 @@ function allDependencyNodes(
 
 /**
  * Above each non-empty dependency block: an informational counts lens
- * (no command) followed by a `↻ Refresh` lens.
+ * (no command), a GitHub sign-in lens while Packman has no GitHub access,
+ * then a `↻ Refresh` lens.
  */
 function blockSummaryLenses(
   root: JsonNode,
@@ -253,8 +261,24 @@ function blockSummaryLenses(
       segments.push("GitHub paused");
     }
     const range = toRange(block.parent);
+    const signIn: OverlayLens[] =
+      context.githubAccess === false
+        ? [
+            {
+              range,
+              title: context.githubPaused
+                ? "Sign in to GitHub"
+                : "Sign in to GitHub for issue counts",
+              command: SIGN_IN_TO_GITHUB_COMMAND,
+              arguments: [],
+              tooltip:
+                "Use the GitHub account signed in to the editor (5,000 requests/hour)",
+            },
+          ]
+        : [];
     return [
       { range, title: segments.join(" · "), command: "", arguments: [] },
+      ...signIn,
       {
         range,
         title: "↻ Refresh",
