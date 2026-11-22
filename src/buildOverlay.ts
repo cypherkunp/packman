@@ -3,11 +3,15 @@ import { dependencyStatus, nonRegistrySource } from "./dependencyStatus";
 import type {
   CellDegrade,
   DependencyGithub,
-  EnrichedDependencyRow,
+  EnrichedDependency,
 } from "./enrichDependencyRow";
 import { npmPackageUrl } from "./fetchNpmLatest";
-import { overlayRoot, parseWellFormed } from "./overlayTree";
-import { DEPENDENCY_BAGS, type DependencyRow } from "./packageViewModel";
+import {
+  DEPENDENCY_BAGS,
+  overlayRoot,
+  parseWellFormed,
+  type Dependency,
+} from "./overlayTree";
 
 /**
  * Pure Overlay builder: turns `package.json` text plus a context into plain
@@ -118,7 +122,7 @@ export type { DependencyGithub };
 
 /** The eager enrichment a Dependency decoration reads. */
 export type DependencyEnrichment = Pick<
-  EnrichedDependencyRow,
+  EnrichedDependency,
   "latest" | "latestDegrade" | "socket"
 >;
 
@@ -150,14 +154,14 @@ export function buildOverlay(text: string, context: OverlayContext): Overlay {
   return overlay;
 }
 
-type DependencyNode = DependencyRow & { property: JsonNode };
+type DependencyNode = Dependency & { property: JsonNode };
 
 /**
  * The registry Dependencies in a `package.json` text, as the Overlay sees
  * them: what the adapter feeds to eager enrichment. Broken (mid-edit) text
  * yields none, so intermediate states never trigger fetches.
  */
-export function overlayDependencies(text: string): DependencyRow[] {
+export function overlayDependencies(text: string): Dependency[] {
   const root = parseWellFormed(text);
   if (root?.type !== "object") {
     return [];
@@ -176,14 +180,14 @@ export type OverlayLineRange = { start: number; end: number };
 export function overlayDependenciesVisibleFirst(
   text: string,
   visibleRanges: readonly OverlayLineRange[] = [],
-): DependencyRow[] {
+): Dependency[] {
   const root = parseWellFormed(text);
   if (root?.type !== "object") {
     return [];
   }
   const toRange = rangeMapper(text);
-  const visible: DependencyRow[] = [];
-  const rest: DependencyRow[] = [];
+  const visible: Dependency[] = [];
+  const rest: Dependency[] = [];
   for (const { name, range, property } of dependencyNodes(root)) {
     const line = toRange(property).start.line;
     const onScreen = visibleRanges.some(

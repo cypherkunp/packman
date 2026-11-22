@@ -2,14 +2,14 @@ import {
   enrichDependencyEager,
   enrichDependencyGithub,
   githubPart,
-  type EnrichedDependencyRow,
+  type EnrichedDependency,
 } from "./enrichDependencyRow";
 import { ENRICHMENT_TTL_MS, type EnrichmentCache } from "./enrichmentCache";
 import type { FetchLike } from "./fetchNpmLatest";
 import { fetchSocketScoresByPurl } from "./fetchSocketScores";
 import type { GithubBudget } from "./githubBudget";
 import { ENRICHMENT_CONCURRENCY, mapPool } from "./mapPool";
-import type { DependencyRow } from "./packageViewModel";
+import type { Dependency } from "./overlayTree";
 import {
   applySocketEnrichment,
   socketComponentsFromRows,
@@ -25,12 +25,12 @@ export type EnrichmentStoreSources = {
 };
 
 export type EagerEnrichmentOptions = {
-  /** Socket is batched in when ready; `missing` marks every row as a CTA. */
+  /** Socket is batched in when ready; `missing` marks every Dependency as a CTA. */
   socket?: SocketCredentials;
   signal?: AbortSignal;
   /** Bypass stored and cached results (the Refresh command). */
   forceRefresh?: boolean;
-  /** Re-fetch Socket scores even for rows that have one (settings changed). */
+  /** Re-fetch Socket scores even for Dependencies that have one (settings changed). */
   forceSocket?: boolean;
 };
 
@@ -47,26 +47,26 @@ export type GithubEnrichmentOptions = {
  * fetch per package. A changed range never refetches.
  */
 export class EnrichmentStore {
-  private readonly entries = new Map<string, EnrichedDependencyRow>();
+  private readonly entries = new Map<string, EnrichedDependency>();
   /** When each entry's eager part was fetched, for expiry. */
   private readonly storedAt = new Map<string, number>();
   private readonly eagerInFlight = new Map<
     string,
-    Promise<EnrichedDependencyRow>
+    Promise<EnrichedDependency>
   >();
-  /** Last degraded eager row per name: not stored, but reused by GitHub. */
-  private readonly degraded = new Map<string, EnrichedDependencyRow>();
+  /** Last degraded eager result per name: not stored, but reused by GitHub. */
+  private readonly degraded = new Map<string, EnrichedDependency>();
   /** When each Dependency's GitHub part was loaded, for expiry. */
   private readonly githubLoaded = new Map<string, number>();
   private readonly githubInFlight = new Map<
     string,
-    Promise<EnrichedDependencyRow>
+    Promise<EnrichedDependency>
   >();
 
   constructor(private readonly sources: EnrichmentStoreSources) {}
 
   /** What is already known for a Dependency, with no fetch. */
-  peek(row: DependencyRow): EnrichedDependencyRow | undefined {
+  peek(row: Dependency): EnrichedDependency | undefined {
     const stored = this.entries.get(row.name);
     return stored ? { ...stored, range: row.range } : undefined;
   }
@@ -76,9 +76,9 @@ export class EnrichmentStore {
    * then one Socket batch when configured. Makes no GitHub requests.
    */
   async enrichEager(
-    rows: readonly DependencyRow[],
+    rows: readonly Dependency[],
     options: EagerEnrichmentOptions = {},
-  ): Promise<Map<string, EnrichedDependencyRow>> {
+  ): Promise<Map<string, EnrichedDependency>> {
     const unique = uniqueByName(rows);
     const signal = options.signal;
     const eager = await mapPool(
@@ -88,7 +88,7 @@ export class EnrichmentStore {
       signal,
     );
     const fetched = eager.filter(
-      (row): row is EnrichedDependencyRow => row !== undefined,
+      (row): row is EnrichedDependency => row !== undefined,
     );
     const withSocket = await this.withSocket(fetched, options);
     return new Map(
@@ -102,12 +102,12 @@ export class EnrichmentStore {
   /**
    * GitHub-only path for one Dependency: repo summary and open issues/PRs.
    * Runs the eager npm lookup first only if it isn't known yet. Goes through
-   * the GitHub budget and the cache; a blocked budget yields a degraded row.
+   * the GitHub budget and the cache; a blocked budget yields a degraded result.
    */
   async enrichGithub(
-    row: DependencyRow,
+    row: Dependency,
     options: GithubEnrichmentOptions = {},
-  ): Promise<EnrichedDependencyRow> {
+  ): Promise<EnrichedDependency> {
     const loaded = this.entries.get(row.name);
     if (
       loaded &&
@@ -142,9 +142,9 @@ export class EnrichmentStore {
   }
 
   private async enrichGithubOne(
-    row: DependencyRow,
+    row: Dependency,
     options: GithubEnrichmentOptions,
-  ): Promise<EnrichedDependencyRow> {
+  ): Promise<EnrichedDependency> {
     const eager =
       this.degraded.get(row.name) ??
       (await this.enrichEagerOne(row, { signal: options.signal }));
@@ -166,9 +166,9 @@ export class EnrichmentStore {
   }
 
   private enrichEagerOne(
-    row: DependencyRow,
+    row: Dependency,
     options: EagerEnrichmentOptions,
-  ): Promise<EnrichedDependencyRow> {
+  ): Promise<EnrichedDependency> {
     const signal = options.signal;
     const stored = this.entries.get(row.name);
     if (
@@ -224,9 +224,9 @@ export class EnrichmentStore {
   }
 
   private async withSocket(
-    rows: EnrichedDependencyRow[],
+    rows: EnrichedDependency[],
     options: EagerEnrichmentOptions,
-  ): Promise<EnrichedDependencyRow[]> {
+  ): Promise<EnrichedDependency[]> {
     const credentials = options.socket;
     if (!credentials) {
       return rows;
@@ -234,7 +234,7 @@ export class EnrichmentStore {
     if (credentials.status === "missing") {
       return applySocketEnrichment(rows, credentials, undefined);
     }
-    const isSettled = (row: EnrichedDependencyRow) =>
+    const isSettled = (row: EnrichedDependency) =>
       !options.forceSocket && row.socket !== undefined && row.socket.kind !== "cta";
     const settled = rows.filter(isSettled);
     const unsettled = rows.filter((row) => !isSettled(row));
@@ -262,6 +262,6 @@ export class EnrichmentStore {
   }
 }
 
-function uniqueByName(rows: readonly DependencyRow[]): DependencyRow[] {
+function uniqueByName(rows: readonly Dependency[]): Dependency[] {
   return [...new Map(rows.map((row) => [row.name, row])).values()];
 }

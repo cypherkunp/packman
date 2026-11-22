@@ -6,13 +6,13 @@ import {
 import {
   githubPart,
   type DependencyGithub,
-  type EnrichedDependencyRow,
+  type EnrichedDependency,
 } from "./enrichDependencyRow";
 import type { EnrichmentStore } from "./enrichmentStore";
 import { npmPackageUrl } from "./fetchNpmLatest";
 import type { GithubBudget } from "./githubBudget";
 import { ENRICHMENT_CONCURRENCY, mapPool } from "./mapPool";
-import type { DependencyRow } from "./packageViewModel";
+import type { Dependency } from "./overlayTree";
 import type { SocketCredentials } from "./socketCredentials";
 
 /** A `package.json` editor as the fetch policy sees it. */
@@ -145,7 +145,7 @@ export class SignalFetchPolicy {
    * degraded or paused results included; only a Dependency never fetched
    * gets its GitHub request here.
    */
-  async hover(row: DependencyRow): Promise<void> {
+  async hover(row: Dependency): Promise<void> {
     if (this.githubByName.has(row.name)) {
       return;
     }
@@ -171,7 +171,7 @@ export class SignalFetchPolicy {
   }
 
   private async fetch(
-    rows: readonly DependencyRow[],
+    rows: readonly Dependency[],
     options: { forceRefresh?: boolean } = {},
   ): Promise<void> {
     const ordered = uniqueByName(rows);
@@ -212,7 +212,7 @@ export class SignalFetchPolicy {
 
   /** One GitHub request through the budget; paused, with none, once blocked. */
   private async loadGithub(
-    row: DependencyRow,
+    row: Dependency,
     options: {
       githubToken: string | undefined;
       signal: AbortSignal;
@@ -234,7 +234,7 @@ export class SignalFetchPolicy {
   }
 }
 
-function rowsOf(documents: readonly ShownDocument[]): DependencyRow[] {
+function rowsOf(documents: readonly ShownDocument[]): Dependency[] {
   return documents.flatMap((document) =>
     overlayDependenciesVisibleFirst(document.text, document.visibleRanges),
   );
@@ -242,15 +242,15 @@ function rowsOf(documents: readonly ShownDocument[]): DependencyRow[] {
 
 function pausedRow(
   store: EnrichmentStore,
-  row: DependencyRow,
-): EnrichedDependencyRow {
+  row: Dependency,
+): EnrichedDependency {
   const known = store.peek(row) ?? { ...row, npmUrl: npmPackageUrl(row.name) };
   return known.openIssuesCount === undefined && known.githubRepo
     ? { ...known, issuesDegrade: "rate_limited" }
     : known;
 }
 
-function enrichmentOf(row: EnrichedDependencyRow): DependencyEnrichment {
+function enrichmentOf(row: EnrichedDependency): DependencyEnrichment {
   const enrichment: DependencyEnrichment = {};
   if (row.latest !== undefined) {
     enrichment.latest = row.latest;
@@ -264,6 +264,6 @@ function enrichmentOf(row: EnrichedDependencyRow): DependencyEnrichment {
   return enrichment;
 }
 
-function uniqueByName(rows: readonly DependencyRow[]): DependencyRow[] {
+function uniqueByName(rows: readonly Dependency[]): Dependency[] {
   return [...new Map(rows.map((row) => [row.name, row])).values()];
 }

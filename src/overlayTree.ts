@@ -7,13 +7,28 @@ import {
   type Node as JsonNode,
   type ParseError,
 } from "jsonc-parser";
-import { DEPENDENCY_BAGS } from "./packageViewModel";
 
 /**
  * Broken-JSON recovery for the Overlay. While a `package.json` is broken
  * mid-edit, the entries that can still be located are rebuilt into a
  * well-formed tree at their original offsets, so the Overlay stays steady.
  */
+
+/** The `package.json` blocks whose entries are Dependencies. */
+export const DEPENDENCY_BAGS = [
+  "dependencies",
+  "devDependencies",
+  "peerDependencies",
+  "optionalDependencies",
+] as const;
+
+export type DependencyBag = (typeof DEPENDENCY_BAGS)[number];
+
+/** One Dependency: its name and declared range. */
+export type Dependency = {
+  name: string;
+  range: string;
+};
 
 /** The blocks whose entries carry an Overlay. */
 const OVERLAY_BLOCKS: readonly string[] = ["scripts", ...DEPENDENCY_BAGS];
