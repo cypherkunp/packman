@@ -37,7 +37,7 @@ export async function promptStaleEditorAssociation(
   }
 
   const answer = await host.showPrompt(
-    "Packman no longer has a UI mode, but your editor associations still open package.json with it. Remove that association so package.json opens in the text editor?",
+    "Your editor associations still open package.json in a Packman editor that no longer exists. Remove that association so package.json opens in the text editor?",
     REMOVE_ASSOCIATION,
   );
   await host.markDismissed();
