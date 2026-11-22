@@ -11,7 +11,6 @@ import {
 import type { EnrichmentStore } from "./enrichmentStore";
 import { npmPackageUrl } from "./fetchNpmLatest";
 import type { GithubBudget } from "./githubBudget";
-import { shouldFetchGithubOnHover } from "./githubOnHover";
 import { ENRICHMENT_CONCURRENCY, mapPool } from "./mapPool";
 import type { DependencyRow } from "./packageViewModel";
 import type { SocketCredentials } from "./socketCredentials";
@@ -100,12 +99,12 @@ export class SignalFetchPolicy {
   }
 
   /**
-   * A Dependency's details are hovered. They read what was already fetched;
-   * only a Dependency never fetched (or paused, once the budget is back)
+   * A Dependency's details are hovered. They read what was already fetched,
+   * degraded or paused results included; only a Dependency never fetched
    * gets its GitHub request here.
    */
   async hover(row: DependencyRow): Promise<void> {
-    if (!shouldFetchGithubOnHover(this.githubByName.get(row.name), this.githubPaused)) {
+    if (this.githubByName.has(row.name)) {
       return;
     }
     this.requested.add(row.name);

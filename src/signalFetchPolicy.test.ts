@@ -142,6 +142,19 @@ describe("SignalFetchPolicy", () => {
     assert.deepEqual(world.githubCalls(), []);
   });
 
+  it("does not re-fetch a paused Dependency on hover once the budget resumes", async () => {
+    const world = setup();
+    world.budget.noteCoreLimit(0, (world.nowMs() + HOUR) / 1000);
+    await world.policy.shown([{ text: PACKAGE }]);
+
+    world.advance(HOUR + 1);
+    assert.equal(world.policy.githubPaused, false);
+    await world.policy.hover({ name: "beta", range: "^1.0.0" });
+
+    assert.deepEqual(world.githubCalls(), []);
+    assert.equal(world.policy.github.get("beta")?.issuesDegrade, "rate_limited");
+  });
+
   it("refreshes only the package.json editors it is given (the visible ones)", async () => {
     const world = setup();
     await world.policy.shown([{ text: PACKAGE }, { text: OTHER }]);
