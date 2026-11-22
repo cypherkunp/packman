@@ -3,7 +3,7 @@ import { EnrichmentRefresh } from "./enrichmentRefresh";
 import { EnrichmentStore } from "./enrichmentStore";
 
 /**
- * Process-wide state shared by UI mode and the Overlay for the extension
+ * Process-wide state shared by the Overlay's surfaces for the extension
  * host's lifetime.
  */
 

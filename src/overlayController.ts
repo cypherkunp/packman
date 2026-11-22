@@ -2,6 +2,7 @@ import { dirname } from "node:path";
 import * as vscode from "vscode";
 import {
   buildOverlay,
+  OVERLAY_TONE_COLORS,
   overlayDependencies,
   RUN_SCRIPT_COMMAND,
   GITHUB_SETTINGS_COMMAND,
@@ -97,7 +98,11 @@ export function registerOverlay(): vscode.Disposable {
   /** Re-render summaries when the GitHub budget blocks or resumes. */
   const githubPauseWatch = new GithubPauseWatch({
     isPaused: isGithubPaused,
-    onChange: () => changed.fire(),
+    onChange: () => {
+      changed.fire();
+      // Signals show `issues ⏸` while paused.
+      renderDecorations();
+    },
     setTimer: (callback) => setInterval(callback, GITHUB_PAUSE_POLL_MS),
     clearTimer: (timer) => clearInterval(timer),
   });
@@ -329,25 +334,17 @@ function isGithubPaused(): boolean {
   return sharedGithubBudget.blockedUntilMs() !== undefined;
 }
 
-const TONE_COLORS: Record<OverlayDecorationTone, string> = {
-  outdated: "editorWarning.foreground",
-  latest: "editorCodeLens.foreground",
-  pending: "editorCodeLens.foreground",
-  degraded: "disabledForeground",
-  risk: "editorError.foreground",
-};
-
 /** One end-of-line decoration type per tone, coloured by the theme only. */
 function createDecorationTypes(): Map<
   OverlayDecorationTone,
   vscode.TextEditorDecorationType
 > {
   return new Map(
-    (Object.keys(TONE_COLORS) as OverlayDecorationTone[]).map((tone) => [
+    (Object.keys(OVERLAY_TONE_COLORS) as OverlayDecorationTone[]).map((tone) => [
       tone,
       vscode.window.createTextEditorDecorationType({
         after: {
-          color: new vscode.ThemeColor(TONE_COLORS[tone]),
+          color: new vscode.ThemeColor(OVERLAY_TONE_COLORS[tone]),
           margin: "0 0 0 2ch",
         },
         rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,

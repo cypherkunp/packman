@@ -45,12 +45,15 @@ export class SignalFetchPolicy {
 
   constructor(private readonly options: SignalFetchPolicyOptions) {}
 
-  /** Eager enrichment per Dependency name, with issue counts. */
+  /** Eager enrichment (npm, Socket) per Dependency name. */
   get enrichment(): ReadonlyMap<string, DependencyEnrichment> {
     return this.enrichmentByName;
   }
 
-  /** GitHub enrichment per Dependency name. */
+  /**
+   * GitHub enrichment per Dependency name: open issues + PRs count, or
+   * `issuesDegrade: "rate_limited"` when the budget paused it.
+   */
   get github(): ReadonlyMap<string, DependencyGithub> {
     return this.githubByName;
   }
@@ -219,14 +222,6 @@ function enrichmentOf(row: EnrichedDependencyRow): DependencyEnrichment {
   }
   if (row.socket !== undefined) {
     enrichment.socket = row.socket;
-  }
-  if (row.openIssuesCount !== undefined) {
-    enrichment.openIssuesCount = row.openIssuesCount;
-  } else if (
-    row.issuesDegrade === "rate_limited" ||
-    row.githubDegrade === "rate_limited"
-  ) {
-    enrichment.issuesPaused = true;
   }
   return enrichment;
 }

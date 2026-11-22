@@ -29,10 +29,31 @@ export type OverlayLens = {
 
 export type OverlayDecorationTone =
   | "outdated"
+  | "outdated-major"
   | "latest"
   | "risk"
   | "pending"
-  | "degraded";
+  | "degraded"
+  | "paused"
+  | "source"
+  | "neutral";
+
+/**
+ * Theme colour per tone (VS Code `ThemeColor` ids only). Outdated escalates
+ * from info to warning for a major jump; a risky Socket score is an error;
+ * paused, source and degraded parts are dimmed.
+ */
+export const OVERLAY_TONE_COLORS: Record<OverlayDecorationTone, string> = {
+  latest: "editorCodeLens.foreground",
+  neutral: "editorCodeLens.foreground",
+  pending: "editorCodeLens.foreground",
+  outdated: "editorInfo.foreground",
+  "outdated-major": "editorWarning.foreground",
+  risk: "editorError.foreground",
+  paused: "disabledForeground",
+  source: "disabledForeground",
+  degraded: "disabledForeground",
+};
 
 export type OverlayDecoration = {
   range: OverlayRange;
@@ -89,15 +110,11 @@ export type OverlayContext = {
 /** The GitHub-only enrichment a Dependency hover reads. */
 export type { DependencyGithub };
 
-/**
- * The enrichment a Dependency signal reads: npm latest, Socket, and the
- * GitHub open issues + PRs count. `issuesPaused` is set while the GitHub
- * budget kept this Dependency's count from being fetched.
- */
+/** The eager enrichment a Dependency decoration reads. */
 export type DependencyEnrichment = Pick<
   EnrichedDependencyRow,
-  "latest" | "latestDegrade" | "socket" | "openIssuesCount"
-> & { issuesPaused?: boolean };
+  "latest" | "latestDegrade" | "socket"
+>;
 
 export const RUN_SCRIPT_COMMAND = "packman.runScript";
 export const MANAGE_TRUST_COMMAND = "workbench.trust.manage";
@@ -170,16 +187,27 @@ export function overlayDependenciesVisibleFirst(
   return [...visible, ...rest];
 }
 
+/** The registry (npm) Dependencies: the ones that get enrichment. */
 function dependencyNodes(root: JsonNode): DependencyNode[] {
+  return allDependencyNodes(root).filter((dependency) => !dependency.source);
+}
+
+/**
+ * Every Dependency in the four dependency blocks. `source` names where a
+ * non-npm Dependency resolves from (workspace, git, …).
+ */
+function allDependencyNodes(
+  root: JsonNode,
+): Array<DependencyNode & { source?: string }> {
   return DEPENDENCY_BAGS.flatMap((bag) => {
     const block = findNodeAtLocation(root, [bag]);
     if (!block || block.type !== "object") {
       return [];
     }
-    return stringEntries(block).flatMap((property) => {
+    return stringEntries(block).map((property) => {
       const name = property.children![0]!.value as string;
       const range = property.children![1]!.value as string;
-      return nonRegistrySource(range) ? [] : [{ name, range, property }];
+      return { name, range, property, source: nonRegistrySource(range) };
     });
   });
 }
@@ -247,13 +275,18 @@ function dependencyDecorations(
   context: OverlayContext,
   toRange: (node: JsonNode) => OverlayRange,
 ): OverlayDecoration[] {
-  return dependencyNodes(root).flatMap((dependency) => {
-    const enrichment = context.enrichment?.get(dependency.name);
-    const signal = withSocketScore(
-      dependencySignal(dependency.range, enrichment),
-      enrichment,
+  return allDependencyNodes(root).map((dependency) => {
+    const range = toRange(dependency.property);
+    if (dependency.source) {
+      return { range, text: dependency.source, tone: "source" as const };
+    }
+    const signal = dependencySignal(
+      dependency.range,
+      context.enrichment?.get(dependency.name),
+      context.github?.get(dependency.name),
+      context.githubPaused ?? false,
     );
-    return signal ? [{ range: toRange(dependency.property), ...signal }] : [];
+    return { range, ...signal };
   });
 }
 
@@ -364,27 +397,48 @@ const DEGRADE_LABEL: Record<CellDegrade, string> = {
 
 type DependencySignal = { text: string; tone: OverlayDecorationTone };
 
-function withSocketScore(
-  signal: DependencySignal | undefined,
+/** When parts disagree, the line takes the most urgent part's tone. */
+const TONE_PRIORITY: readonly OverlayDecorationTone[] = [
+  "risk",
+  "outdated-major",
+  "outdated",
+  "degraded",
+  "latest",
+  "neutral",
+  "paused",
+];
+
+/**
+ * The Dependency signal: version, open issues + PRs, and Socket parts joined
+ * with ` · `. Unknown parts are left out; with nothing known it is pending.
+ */
+function dependencySignal(
+  range: string,
   enrichment: DependencyEnrichment | undefined,
-): DependencySignal | undefined {
-  const socket = enrichment?.socket;
-  if (socket?.kind !== "score") {
-    return signal;
+  github: DependencyGithub | undefined,
+  githubPaused: boolean,
+): DependencySignal {
+  const parts = [
+    versionPart(range, enrichment),
+    issuesPart(github, githubPaused),
+    socketPart(enrichment),
+  ].filter((part): part is DependencySignal => part !== undefined);
+  if (parts.length === 0) {
+    return { text: "…", tone: "pending" };
   }
-  const score = `Socket ${socket.overall100}`;
-  return {
-    text: signal ? `${signal.text} · ${score}` : score,
-    tone: socket.highSeverity ? "risk" : (signal?.tone ?? "latest"),
-  };
+  const tone =
+    TONE_PRIORITY.find((candidate) =>
+      parts.some((part) => part.tone === candidate),
+    ) ?? "neutral";
+  return { text: parts.map((part) => part.text).join(" · "), tone };
 }
 
-function dependencySignal(
+function versionPart(
   range: string,
   enrichment: DependencyEnrichment | undefined,
 ): DependencySignal | undefined {
   if (!enrichment) {
-    return { text: "…", tone: "pending" };
+    return undefined;
   }
   if (!enrichment.latest && enrichment.latestDegrade) {
     return {
@@ -394,12 +448,47 @@ function dependencySignal(
   }
   const status = dependencyStatus(range, enrichment.latest);
   if (status.kind === "behind" && enrichment.latest) {
-    return { text: `→ ${enrichment.latest}`, tone: "outdated" };
+    return {
+      text: `↑ ${enrichment.latest}`,
+      tone: status.breaking ? "outdated-major" : "outdated",
+    };
   }
   if (status.kind === "current") {
     return { text: "✓ latest", tone: "latest" };
   }
   return undefined;
+}
+
+/** GitHub's open count covers issues and PRs together. */
+function issuesPart(
+  github: DependencyGithub | undefined,
+  githubPaused: boolean,
+): DependencySignal | undefined {
+  if (github?.openIssuesCount !== undefined) {
+    return { text: plural(github.openIssuesCount, "issue"), tone: "neutral" };
+  }
+  const rateLimited =
+    github?.githubDegrade === "rate_limited" ||
+    github?.issuesDegrade === "rate_limited";
+  // A loaded result with no repo and no failure means there is nothing to count.
+  const repoMayExist = !github || github.githubUrl !== undefined;
+  if (rateLimited || (githubPaused && repoMayExist)) {
+    return { text: "issues ⏸", tone: "paused" };
+  }
+  return undefined;
+}
+
+/** Left out unless Socket is configured and scored this Dependency. */
+function socketPart(
+  enrichment: DependencyEnrichment | undefined,
+): DependencySignal | undefined {
+  const socket = enrichment?.socket;
+  if (socket?.kind !== "score") {
+    return undefined;
+  }
+  return socket.highSeverity
+    ? { text: `⚠ Socket ${socket.overall100}`, tone: "risk" }
+    : { text: `Socket ${socket.overall100}`, tone: "neutral" };
 }
 
 function scriptLenses(

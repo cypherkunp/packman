@@ -37,7 +37,7 @@ describe("SignalFetchPolicy", () => {
       "acme/gamma",
     ]);
     assert.equal(world.policy.enrichment.get("alpha")?.latest, "1.0.0");
-    assert.equal(world.policy.enrichment.get("alpha")?.openIssuesCount, 5);
+    assert.equal(world.policy.github.get("alpha")?.openIssuesCount, 5);
   });
 
   it("fetches Dependencies in the visible range first", async () => {
@@ -102,12 +102,12 @@ describe("SignalFetchPolicy", () => {
 
     assert.deepEqual(world.githubCalls(), ["acme/alpha"]);
     assert.equal(world.policy.githubPaused, true);
-    assert.equal(world.policy.enrichment.get("alpha")?.openIssuesCount, 5);
-    assert.equal(world.policy.enrichment.get("alpha")?.issuesPaused, undefined);
+    assert.equal(world.policy.github.get("alpha")?.openIssuesCount, 5);
+    assert.equal(world.policy.github.get("alpha")?.issuesDegrade, undefined);
     for (const name of ["beta", "gamma"]) {
-      assert.equal(world.policy.enrichment.get(name)?.issuesPaused, true);
+      assert.equal(world.policy.github.get(name)?.issuesDegrade, "rate_limited");
+      assert.equal(world.policy.github.get(name)?.openIssuesCount, undefined);
       assert.equal(world.policy.enrichment.get(name)?.latest, "1.0.0");
-      assert.equal(world.policy.enrichment.get(name)?.openIssuesCount, undefined);
     }
   });
 
@@ -138,7 +138,7 @@ describe("SignalFetchPolicy", () => {
     );
     assert.deepEqual(world.githubCalls().slice(-1), ["acme/delta"]);
     assert.equal(after.length, 2);
-    assert.equal(world.policy.enrichment.get("delta")?.openIssuesCount, 5);
+    assert.equal(world.policy.github.get("delta")?.openIssuesCount, 5);
     assert.equal(world.policy.enrichment.has("alpha"), false);
   });
 
