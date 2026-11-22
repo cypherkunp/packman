@@ -13,7 +13,7 @@ The Overlay, which never changes the file:
 
 GitHub issue counts need no setup: Packman uses the GitHub account you're signed in to in the editor, and the Block summary offers a one-click sign-in until it has access. `packman.github.token` is now only an override.
 
-Data is fetched only when you open or switch to a `package.json` (visible Dependencies first, cached for an hour), type a new Dependency, or click Refresh, which covers visible editors only. Nothing is fetched in the background or retried when GitHub resumes.
+Data is fetched only when you open or switch to a `package.json` (visible Dependencies first, cached for an hour), type a new Dependency, click Refresh, change the Socket settings, or click Sign in to GitHub; the last three cover visible editors only. Nothing is fetched in the background or retried when GitHub resumes.
 
 Turn the Overlay off with `packman.overlay.enabled`, or hide it for the session with Packman: Toggle Overlay.
 

@@ -21,7 +21,7 @@ Packman uses the GitHub account you're signed in to in the editor (Accounts menu
 
 ## When data is fetched
 
-Only when you act: when you open a `package.json` (or switch back to it after its data has expired), type a new Dependency, or click Refresh, which covers the editors you can see. What's on screen is fetched first, and results are cached for an hour. Nothing is fetched in the background, and nothing is retried on its own.
+Only when you act: when you open a `package.json` (or switch back to it after its data has expired), type a new Dependency, click Refresh, change the Socket settings, or click Sign in to GitHub; the last three cover only the editors you can see. What's on screen is fetched first, and results are cached for an hour. Nothing is fetched in the background, and nothing is retried on its own.
 
 ## Settings
 

@@ -78,8 +78,8 @@ Fetch failures are dimmed words, never red. Red means the package itself looks r
 
 - **Never flicker.** Results that stream in are coalesced (about 50 ms) into one render, and typing is debounced before anything is fetched. A signal never blanks while it waits; it keeps what it knows and adds parts as they arrive.
 - **Last good text.** While `package.json` is broken mid-edit, entries that existed in the last well-formed text keep their lenses and signals at their positions; broken text never triggers a fetch.
-- **Last good data.** Expired cache entries are refetched only when an editor is shown again, a new Dependency is typed, or the user clicks Refresh. Only Refresh and a Socket settings change clear what is shown, and both act on visible editors only.
-- **No background work.** No timers fetch, background tabs never fetch, and nothing retries when GitHub resumes; paused parts wait for the next open, edit or Refresh.
+- **Last good data.** Expired cache entries are refetched only when an editor is shown again or the user clicks Refresh; typing fetches only new Dependencies. Only Refresh clears what is shown. Refresh, a Socket settings change (Socket only) and a granted Sign in to GitHub click (GitHub only) act on visible editors only.
+- **No background work.** No timers fetch, background tabs never fetch, and nothing retries when GitHub resumes; paused parts wait for the next open or Refresh, and a hover shows them as paused.
 
 ## Don'ts
 

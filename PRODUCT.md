@@ -27,7 +27,7 @@ The pairing is the point: running scripts and judging every Dependency, in the f
 - Run actions run `<pm> run <script>` using the package manager detected from the lockfile (pnpm / yarn / bun, else npm), with cwd = the package.json folder, in a reused `Packman: <folder>` terminal.
 - Enrichment comes from the npm registry, the GitHub REST API, and Socket.dev (end-user org token + org slug only).
 - GitHub needs no setup: Packman uses the editor's signed-in GitHub account (5,000/hr). Until it has access, the Block summary offers a one-click sign-in; `packman.github.token` is only an override. Unauthenticated access gets 60/hr.
-- Fetching is strictly user-driven: when a `package.json` editor is opened or shown again after its cache expired, when a new Dependency is typed, or on Refresh (visible editors only). Results are cached for an hour; there are no timers, no background tabs and no automatic retry.
+- Fetching is strictly user-driven: when a `package.json` editor is opened or shown again after its cache expired, when a new Dependency is typed in a visible editor, on Refresh (visible editors only), on a Socket settings change (visible editors only), or on clicking Sign in to GitHub (GitHub data for visible editors only). Results are cached for an hour; there are no timers, no background tabs and no automatic retry.
 - Users work in any VS Code theme: light, dark, high contrast.
 
 ## Capabilities and Constraints
@@ -35,7 +35,7 @@ The pairing is the point: running scripts and judging every Dependency, in the f
 - The Overlay covers `scripts` and the four dependency blocks (`dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`). **Override entries** (`overrides` / `resolutions`) get nothing; every other field is just the file's text.
 - Dependency signal: `✓ latest` or `↑ x.y.z`, then open issues (GitHub counts issues and PRs together) and the Socket score. Unknown parts are left out; non-npm Dependencies show only their source.
 - Socket parts appear only once the user configures a token; Dependency details offer a link to configure it. Richer or redistributable Socket integration is deferred (#16).
-- Rate limits, missing tokens and fetch failures degrade gracefully (e.g. GitHub issue counts pause and show when they resume).
+- Rate limits, missing tokens and fetch failures degrade gracefully (e.g. GitHub issue counts pause and show again after the next open or Refresh once GitHub resumes).
 - **Packman never writes the JSON.** The Overlay never edits `package.json`; every change is one the developer types in the text editor.
 - **Styling uses theme colours only.** Every decoration colour is a VS Code `ThemeColor`; there is no brand palette or custom typeface. Must hold up in light, dark and high-contrast themes. See `DESIGN.md`.
 - Workspace Trust: untrusted workspaces get a single "Trust workspace to run scripts" action instead of Run actions; read-only and diff views get no Run actions.
