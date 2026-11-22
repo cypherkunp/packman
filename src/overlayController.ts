@@ -256,7 +256,12 @@ export function registerOverlay(): vscode.Disposable {
     changed.fire();
     renderDecorations();
   };
-  /** Typing: after the debounce, fetch only Dependency names never seen. */
+  /**
+   * Typing: after the debounce, fetch only Dependency names never seen, and
+   * only for documents shown in a visible editor (on-screen ones first).
+   * A background tab changed on disk (npm install, git checkout) fetches
+   * nothing until it is shown.
+   */
   const edited = new Set<vscode.TextDocument>();
   const editedSoon = (document: vscode.TextDocument) => {
     edited.add(document);
@@ -265,10 +270,15 @@ export function registerOverlay(): vscode.Disposable {
     }
     debounce = setTimeout(() => {
       rerender();
-      const documents = [...edited];
+      const documents = new Set(edited);
       edited.clear();
-      for (const document of documents) {
-        whenEnabled(() => policy.edited({ text: document.getText() }));
+      const shown = new Set<vscode.TextDocument>();
+      for (const editor of overlayEditors()) {
+        if (!documents.has(editor.document) || shown.has(editor.document)) {
+          continue;
+        }
+        shown.add(editor.document);
+        whenEnabled(() => policy.edited(shownDocument(editor)));
       }
     }, REFRESH_DEBOUNCE_MS);
   };

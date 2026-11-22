@@ -91,6 +91,24 @@ describe("SignalFetchPolicy", () => {
     ]);
   });
 
+  it("fetches the new Dependencies an edit added, visible ones first", async () => {
+    const world = setup();
+    await world.policy.shown([{ text: PACKAGE }]);
+    const edited = PACKAGE.replace(
+      `"beta": "^1.0.0"`,
+      `"beta": "^1.0.0",\n    "zeta": "^1.0.0"`,
+    ).replace(`"gamma": "^1.0.0"`, `"gamma": "^1.0.0",\n    "eta": "^1.0.0"`);
+
+    // Only `eta` (line 9) is on screen.
+    await world.policy.edited({
+      text: edited,
+      visibleRanges: [{ start: 9, end: 10 }],
+    });
+
+    assert.deepEqual(world.npmCalls().slice(3), ["eta", "zeta"]);
+    assert.deepEqual(world.githubCalls().slice(3), ["acme/eta", "acme/zeta"]);
+  });
+
   it("stops GitHub requests once the budget runs out and marks the rest paused", async () => {
     const world = setup();
     // One request left until the reset, an hour from now.
