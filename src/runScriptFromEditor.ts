@@ -3,8 +3,8 @@ import { runPackageScript } from "./runPackageScript";
 import { scriptFallbackWarnedDirs } from "./sessionState";
 
 /**
- * Runs a `package.json` script in a Packman terminal, for UI mode and the
- * Overlay alike: refuses in an untrusted workspace, and asks the user to
+ * Runs a `package.json` script in a Packman terminal for an Overlay Run
+ * action: refuses in an untrusted workspace, and asks the user to
  * save first when the document has no folder to run in.
  */
 export function runScriptFromEditor(

@@ -1,21 +1,18 @@
 import * as vscode from "vscode";
-import { PACKMAN_VIEW_TYPE } from "./openWith";
 import { registerOverlay } from "./overlayController";
-import { PackageJsonEditorProvider } from "./packageJsonEditorProvider";
 import { enrichmentRefresh } from "./sessionState";
+import {
+  promptStaleEditorAssociation,
+  type AssociationScope,
+} from "./staleEditorAssociation";
+
+const STALE_ASSOCIATION_DISMISSED = "packman.staleEditorAssociationPrompted";
 
 export function activate(context: vscode.ExtensionContext): void {
-  context.subscriptions.push(PackageJsonEditorProvider.register());
   context.subscriptions.push(enrichmentRefresh);
   context.subscriptions.push(registerOverlay());
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("packman.openEditMode", () =>
-      openPackageJsonWith("default"),
-    ),
-    vscode.commands.registerCommand("packman.openUiMode", () =>
-      openPackageJsonWith(PACKMAN_VIEW_TYPE),
-    ),
     vscode.commands.registerCommand("packman.openSocketSettings", async () => {
       await vscode.commands.executeCommand(
         "workbench.action.openSettings",
@@ -37,40 +34,40 @@ export function activate(context: vscode.ExtensionContext): void {
       enrichmentRefresh.refresh();
     }),
   );
+
+  void promptStaleEditorAssociation({
+    readAssociations: (scope) => {
+      const inspected = vscode.workspace
+        .getConfiguration("workbench")
+        .inspect<Record<string, string>>("editorAssociations");
+      const value =
+        scope === "global" ? inspected?.globalValue : inspected?.workspaceValue;
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? value
+        : undefined;
+    },
+    writeAssociations: async (scope, value) => {
+      await vscode.workspace
+        .getConfiguration("workbench")
+        .update("editorAssociations", value, configurationTarget(scope));
+    },
+    showPrompt: (message, action) =>
+      Promise.resolve(vscode.window.showInformationMessage(message, action)),
+    wasDismissed: () =>
+      context.globalState.get<boolean>(STALE_ASSOCIATION_DISMISSED) === true,
+    markDismissed: () =>
+      Promise.resolve(
+        context.globalState.update(STALE_ASSOCIATION_DISMISSED, true),
+      ),
+  }).catch(() => undefined);
 }
 
 export function deactivate(): void {}
 
-async function openPackageJsonWith(
-  viewId: typeof PACKMAN_VIEW_TYPE | "default",
-): Promise<void> {
-  const uri = activePackageJsonUri();
-  if (!uri) {
-    return;
-  }
-  await vscode.commands.executeCommand("vscode.openWith", uri, viewId);
-}
-
-function activePackageJsonUri(): vscode.Uri | undefined {
-  const tabInput = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
-  if (
-    tabInput &&
-    typeof tabInput === "object" &&
-    "uri" in tabInput &&
-    tabInput.uri instanceof vscode.Uri &&
-    isPackageJsonUri(tabInput.uri)
-  ) {
-    return tabInput.uri;
-  }
-
-  const doc = vscode.window.activeTextEditor?.document;
-  if (doc && isPackageJsonUri(doc.uri)) {
-    return doc.uri;
-  }
-
-  return undefined;
-}
-
-function isPackageJsonUri(uri: vscode.Uri): boolean {
-  return /(?:^|[/\\])package\.json$/i.test(uri.fsPath);
+function configurationTarget(
+  scope: AssociationScope,
+): vscode.ConfigurationTarget {
+  return scope === "global"
+    ? vscode.ConfigurationTarget.Global
+    : vscode.ConfigurationTarget.Workspace;
 }

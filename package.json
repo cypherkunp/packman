@@ -29,9 +29,6 @@
   },
   "pricing": "Free",
   "activationEvents": [
-    "onCustomEditor:packman.packageJson",
-    "onCommand:packman.openEditMode",
-    "onCommand:packman.openUiMode",
     "onCommand:packman.openSocketSettings",
     "onCommand:packman.openGithubSettings",
     "onCommand:packman.refreshEnrichment",
@@ -46,29 +43,7 @@
   },
   "main": "./dist/extension.js",
   "contributes": {
-    "customEditors": [
-      {
-        "viewType": "packman.packageJson",
-        "displayName": "Packman",
-        "selector": [
-          {
-            "filenamePattern": "**/package.json"
-          }
-        ],
-        "priority": "option"
-      }
-    ],
     "commands": [
-      {
-        "command": "packman.openEditMode",
-        "title": "Packman: Open in Text Editor",
-        "icon": "$(go-to-file)"
-      },
-      {
-        "command": "packman.openUiMode",
-        "title": "Packman: Open UI Mode",
-        "icon": "$(eye)"
-      },
       {
         "command": "packman.openSocketSettings",
         "title": "Packman: Open Socket Settings"
@@ -85,39 +60,6 @@
       {
         "command": "packman.toggleOverlay",
         "title": "Packman: Toggle Overlay"
-      }
-    ],
-    "menus": {
-      "editor/title": [
-        {
-          "command": "packman.openEditMode",
-          "when": "activeCustomEditorId == packman.packageJson",
-          "group": "navigation"
-        },
-        {
-          "command": "packman.refreshEnrichment",
-          "when": "activeCustomEditorId == packman.packageJson",
-          "group": "navigation"
-        },
-        {
-          "command": "packman.openUiMode",
-          "when": "resourceFilename == package.json && activeCustomEditorId != packman.packageJson",
-          "group": "navigation"
-        }
-      ]
-    },
-    "keybindings": [
-      {
-        "command": "packman.openEditMode",
-        "key": "ctrl+shift+m",
-        "mac": "cmd+shift+m",
-        "when": "activeCustomEditorId == packman.packageJson"
-      },
-      {
-        "command": "packman.openUiMode",
-        "key": "ctrl+shift+m",
-        "mac": "cmd+shift+m",
-        "when": "resourceFilename == package.json && activeCustomEditorId != packman.packageJson"
       }
     ],
     "configuration": {
