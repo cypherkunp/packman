@@ -19,3 +19,5 @@ PRODUCT.md
 DESIGN.md
 .impeccable/**
 .github/**
+.pre-commit-config.yaml
+scripts/**
