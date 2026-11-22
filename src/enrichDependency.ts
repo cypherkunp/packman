@@ -70,18 +70,6 @@ export type EnrichmentOptions = {
 type GithubCache = Awaited<ReturnType<typeof fetchGithubRepoSummary>>;
 
 /**
- * Full enrichment: the eager path followed by the GitHub-only path.
- * The Overlay runs the two paths separately; this composes them in one call.
- */
-export async function enrichDependencyRow(
-  row: Dependency,
-  options: EnrichmentOptions = {},
-): Promise<EnrichedDependency> {
-  const eager = await enrichDependencyEager(row, options);
-  return enrichDependencyGithub(eager, options);
-}
-
-/**
  * Eager path: npm latest (and the repo link npm declares). Never calls GitHub,
  * so it is cheap enough to run whenever a package.json opens.
  */

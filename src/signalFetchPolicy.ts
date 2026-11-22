@@ -7,7 +7,7 @@ import {
   githubPart,
   type DependencyGithub,
   type EnrichedDependency,
-} from "./enrichDependencyRow";
+} from "./enrichDependency";
 import type { EnrichmentStore } from "./enrichmentStore";
 import { npmPackageUrl } from "./fetchNpmLatest";
 import type { GithubBudget } from "./githubBudget";

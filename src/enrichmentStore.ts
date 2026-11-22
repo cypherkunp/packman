@@ -3,7 +3,7 @@ import {
   enrichDependencyGithub,
   githubPart,
   type EnrichedDependency,
-} from "./enrichDependencyRow";
+} from "./enrichDependency";
 import { ENRICHMENT_TTL_MS, type EnrichmentCache } from "./enrichmentCache";
 import type { FetchLike } from "./fetchNpmLatest";
 import { fetchSocketScoresByPurl } from "./fetchSocketScores";

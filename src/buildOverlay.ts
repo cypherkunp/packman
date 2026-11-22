@@ -4,7 +4,7 @@ import type {
   CellDegrade,
   DependencyGithub,
   EnrichedDependency,
-} from "./enrichDependencyRow";
+} from "./enrichDependency";
 import { npmPackageUrl } from "./fetchNpmLatest";
 import {
   DEPENDENCY_BAGS,
