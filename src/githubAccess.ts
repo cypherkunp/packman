@@ -16,7 +16,7 @@ export type GithubAccessOptions = {
     scopes: readonly string[],
     options: { interactive: boolean },
   ) => PromiseLike<GithubSession | undefined>;
-  /** Access was just granted: re-fetch the visible editors. */
+  /** A sign-in click was granted: re-fetch GitHub data for visible editors. */
   onGranted: () => void;
   /** Whether Packman has access changed: re-render. */
   onChange: () => void;
@@ -60,15 +60,12 @@ export class GithubAccess {
   }
 
   /**
-   * The editor's GitHub sessions changed (Accounts menu). Gaining access
-   * re-fetches; losing it only re-renders so the sign-in shows again.
+   * The editor's GitHub sessions changed from elsewhere (the Accounts menu,
+   * another extension). This only updates access for the next user-driven
+   * fetch and re-renders; it never fetches (ADR 0002).
    */
   async sessionsChanged(): Promise<void> {
-    const before = this.access;
     await this.token();
-    if (before !== true && this.access === true) {
-      this.options.onGranted();
-    }
   }
 
   private async requestInteractively(): Promise<void> {

@@ -109,14 +109,13 @@ describe("GithubAccess", () => {
     assert.equal(failed.access.hasAccess, false);
   });
 
-  it("re-fetches once when access appears from the Accounts menu, not again after a sign-in click", async () => {
+  it("never re-fetches when access appears from elsewhere, only after a sign-in click", async () => {
     const outside = harness();
     await outside.access.token();
     outside.setSilent("session");
     await outside.access.sessionsChanged();
-    await outside.access.sessionsChanged();
     assert.equal(outside.access.hasAccess, true);
-    assert.equal(outside.events.granted, 1);
+    assert.equal(outside.events.granted, 0);
     assert.ok(outside.requests.every((request) => !request.interactive));
 
     const clicked = harness({ interactive: async () => "granted" });

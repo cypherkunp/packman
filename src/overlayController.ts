@@ -137,7 +137,8 @@ export function registerOverlay(): vscode.Disposable {
   /**
    * GitHub access needs no setup: the token setting, else the editor's
    * signed-in account. Only the Block summary's sign-in click prompts; a
-   * granted session re-fetches the visible editors, like Refresh.
+   * granted click re-fetches GitHub data for the visible editors. Sessions
+   * changed elsewhere only take effect at the next user-driven fetch.
    */
   const githubAccess = new GithubAccess({
     configuredToken: () =>
@@ -148,7 +149,7 @@ export function registerOverlay(): vscode.Disposable {
         scopes,
         interactive ? { createIfNone: true } : { silent: true },
       ),
-    onGranted: () => enrichmentRefresh.refresh(),
+    onGranted: () => whenEnabled(() => policy.signedIn(visibleDocuments())),
     onChange: () => changed.fire(),
   });
 

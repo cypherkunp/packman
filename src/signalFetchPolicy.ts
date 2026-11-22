@@ -99,6 +99,30 @@ export class SignalFetchPolicy {
   }
 
   /**
+   * A sign-in click was granted: re-fetch only GitHub data, with the new
+   * access, for the given (visible) editors. npm and Socket results stay.
+   */
+  async signedIn(documents: readonly ShownDocument[]): Promise<void> {
+    const rows = uniqueByName(rowsOf(documents));
+    if (rows.length === 0) {
+      return;
+    }
+    for (const row of rows) {
+      this.requested.add(row.name);
+    }
+    const signal = this.abort.signal;
+    const githubToken = await this.options.githubToken();
+    this.options.budget.setIdentity(githubToken);
+    await mapPool(
+      rows,
+      ENRICHMENT_CONCURRENCY,
+      (row) =>
+        this.loadGithub(row, { githubToken, signal, forceRefresh: true }),
+      signal,
+    );
+  }
+
+  /**
    * A Dependency's details are hovered. They read what was already fetched,
    * degraded or paused results included; only a Dependency never fetched
    * gets its GitHub request here.

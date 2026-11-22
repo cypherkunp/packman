@@ -173,6 +173,22 @@ describe("SignalFetchPolicy", () => {
     assert.equal(world.policy.enrichment.has("alpha"), false);
   });
 
+  it("re-fetches only GitHub data, for the given editors, after signing in", async () => {
+    let token: string | undefined;
+    const world = setup({ githubToken: () => token });
+    await world.policy.shown([{ text: PACKAGE }, { text: OTHER }]);
+    const npmBefore = world.npmCalls().length;
+    const githubBefore = world.githubCalls().length;
+
+    token = "granted";
+    await world.policy.signedIn([{ text: OTHER }]);
+
+    assert.equal(world.npmCalls().length, npmBefore);
+    assert.deepEqual(world.githubCalls().slice(githubBefore), ["acme/delta"]);
+    assert.equal(world.policy.enrichment.get("alpha")?.latest, "1.0.0");
+    assert.equal(world.policy.github.get("alpha")?.openIssuesCount, 5);
+  });
+
   it("re-reads Socket for the given editors when its settings change", async () => {
     let socket: SocketCredentials = { status: "missing" };
     const world = setup({ socket: () => socket });
@@ -236,6 +252,7 @@ function setup(
   options: {
     socket?: SocketCredentials | (() => SocketCredentials);
     budget?: GithubBudget;
+    githubToken?: () => string | undefined;
   } = {},
 ): World {
   let clock = 1_000_000;
@@ -279,7 +296,7 @@ function setup(
       typeof options.socket === "function"
         ? options.socket()
         : (options.socket ?? { status: "missing" }),
-    githubToken: async () => undefined,
+    githubToken: async () => options.githubToken?.(),
     onChange: () => {
       changes += 1;
     },
