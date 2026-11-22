@@ -1,6 +1,6 @@
 import type { EnrichmentCache } from "./enrichmentCache";
 import { enrichmentCacheKey } from "./enrichmentCache";
-import type { DependencyRow } from "./packageViewModel";
+import type { Dependency } from "./overlayTree";
 import { fetchGithubRepoSummary } from "./fetchGithubRepoSummary";
 import {
   fetchNpmLatest,
@@ -14,7 +14,7 @@ import type { SocketColumn } from "./socketColumn";
 
 export type CellDegrade = "rate_limited" | "offline" | "timeout";
 
-export type EnrichedDependencyRow = DependencyRow & {
+export type EnrichedDependency = Dependency & {
   npmUrl: string;
   latest?: string;
   /** `owner/repo` from npm metadata; the GitHub-only path needs it. */
@@ -31,7 +31,7 @@ export type EnrichedDependencyRow = DependencyRow & {
 
 /** The GitHub-only part of a Dependency's enrichment. */
 export type DependencyGithub = Pick<
-  EnrichedDependencyRow,
+  EnrichedDependency,
   | "githubUrl"
   | "issuesUrl"
   | "openIssuesCount"
@@ -47,7 +47,7 @@ const GITHUB_FIELDS = [
   "issuesDegrade",
 ] as const satisfies readonly (keyof DependencyGithub)[];
 
-/** The GitHub fields a row has set, and no others. */
+/** The GitHub fields a Dependency has set, and no others. */
 export function githubPart(row: DependencyGithub): DependencyGithub {
   const part: Record<string, unknown> = {};
   for (const field of GITHUB_FIELDS) {
@@ -70,29 +70,17 @@ export type EnrichmentOptions = {
 type GithubCache = Awaited<ReturnType<typeof fetchGithubRepoSummary>>;
 
 /**
- * Full enrichment: the eager path followed by the GitHub-only path.
- * UI mode uses this to keep its eager behaviour.
- */
-export async function enrichDependencyRow(
-  row: DependencyRow,
-  options: EnrichmentOptions = {},
-): Promise<EnrichedDependencyRow> {
-  const eager = await enrichDependencyEager(row, options);
-  return enrichDependencyGithub(eager, options);
-}
-
-/**
  * Eager path: npm latest (and the repo link npm declares). Never calls GitHub,
  * so it is cheap enough to run whenever a package.json opens.
  */
 export async function enrichDependencyEager(
-  row: DependencyRow,
+  row: Dependency,
   options: EnrichmentOptions = {},
-): Promise<EnrichedDependencyRow> {
+): Promise<EnrichedDependency> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const cache = options.cache;
   const init = options.signal ? { signal: options.signal } : undefined;
-  const base: EnrichedDependencyRow = {
+  const base: EnrichedDependency = {
     ...row,
     npmUrl: npmPackageUrl(row.name),
   };
@@ -138,10 +126,10 @@ export async function enrichDependencyEager(
  * the enrichment cache; never calls npm.
  */
 export async function enrichDependencyGithub(
-  eager: EnrichedDependencyRow,
+  eager: EnrichedDependency,
   options: EnrichmentOptions = {},
-): Promise<EnrichedDependencyRow> {
-  const base: EnrichedDependencyRow = { ...eager };
+): Promise<EnrichedDependency> {
+  const base: EnrichedDependency = { ...eager };
   const ownerRepo = base.githubRepo;
   if (!ownerRepo) {
     return base;
@@ -217,7 +205,7 @@ function peekOkGithub(
 }
 
 function applyNpmOk(
-  base: EnrichedDependencyRow,
+  base: EnrichedDependency,
   npm: Extract<NpmLatestResult, { status: "ok" }> | undefined,
 ): void {
   if (!npm) {
@@ -233,7 +221,7 @@ function applyNpmOk(
 }
 
 function applyRateLimitedGithub(
-  base: EnrichedDependencyRow,
+  base: EnrichedDependency,
   cache: EnrichmentCache<unknown> | undefined,
   githubKey: string,
 ): void {
@@ -245,7 +233,7 @@ function applyRateLimitedGithub(
 }
 
 function applyGithubOk(
-  base: EnrichedDependencyRow,
+  base: EnrichedDependency,
   github: Extract<GithubCache, { status: "ok" }> | undefined,
 ): void {
   if (!github) {

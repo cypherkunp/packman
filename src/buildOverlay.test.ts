@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  OVERLAY_TONE_COLORS,
   buildOverlay,
   overlayDependencies,
   type DependencyEnrichment,
@@ -29,7 +30,9 @@ const lensSummary = (text: string, context = ctx()) =>
   }));
 
 const isBlockSummaryLens = (lens: OverlayLens) =>
-  lens.command === "" || lens.command === "packman.refreshEnrichment";
+  lens.command === "" ||
+  lens.command === "packman.refreshEnrichment" ||
+  lens.command === "packman.signInToGithub";
 
 const SAMPLE = `{
   "name": "demo",
@@ -179,17 +182,35 @@ describe("buildOverlay", () => {
         tone: d.tone,
       }));
 
-    it("shows → latest on an outdated Dependency", () => {
+    const KNOWN = {
+      leftpad: { latest: "2.1.0" },
+      react: { latest: "18.3.1" },
+      typescript: { latest: "5.3.3" },
+    };
+
+    it("shows ↑ latest on an outdated Dependency, stronger for a major jump", () => {
       assert.deepEqual(
         decorated(DEPS, {
           leftpad: { latest: "2.1.0" },
-          react: { latest: "19.0.0" },
-          typescript: { latest: "5.6.2" },
+          react: { latest: "18.4.0" },
+          typescript: { latest: "5.3.9" },
         }),
         [
-          { line: 4, text: "→ 2.1.0", tone: "outdated" },
-          { line: 5, text: "→ 19.0.0", tone: "outdated" },
-          { line: 8, text: "→ 5.6.2", tone: "outdated" },
+          { line: 4, text: "↑ 2.1.0", tone: "outdated-major" },
+          { line: 5, text: "✓ latest", tone: "latest" },
+          { line: 8, text: "✓ latest", tone: "latest" },
+        ],
+      );
+      assert.deepEqual(
+        decorated(DEPS, {
+          leftpad: { latest: "1.0.0" },
+          react: { latest: "18.2.0" },
+          typescript: { latest: "5.6.2" },
+        }).map((d) => [d.line, d.text, d.tone]),
+        [
+          [4, "✓ latest", "latest"],
+          [5, "✓ latest", "latest"],
+          [8, "↑ 5.6.2", "outdated"],
         ],
       );
     });
@@ -247,7 +268,7 @@ describe("buildOverlay", () => {
           typescript: { latest: "5.3.3" },
         }).map((d) => [d.line, d.text]),
         [
-          [4, "→ 2.0.0"],
+          [4, "↑ 2.0.0"],
           [5, "✓ latest"],
           [8, "✓ latest"],
         ],
@@ -268,9 +289,72 @@ describe("buildOverlay", () => {
           typescript: { latest: "5.3.3", socket: { kind: "empty" } },
         }),
         [
-          { line: 4, text: "→ 2.1.0 · Socket 87", tone: "outdated" },
-          { line: 5, text: "✓ latest · Socket 42", tone: "risk" },
+          { line: 4, text: "↑ 2.1.0 · Socket 87", tone: "outdated-major" },
+          { line: 5, text: "✓ latest · ⚠ Socket 42", tone: "risk" },
           { line: 8, text: "✓ latest", tone: "latest" },
+        ],
+      );
+    });
+
+    it("adds open issues + PRs when GitHub knows them, issues ⏸ while paused", () => {
+      const github = new Map([
+        ["leftpad", { openIssuesCount: 12, issuesUrl: "https://x/issues" }],
+        ["react", { githubUrl: "https://github.com/facebook/react" }],
+      ]);
+      const known = {
+        leftpad: { latest: "1.0.0" },
+        react: { latest: "18.3.1" },
+        typescript: { latest: "5.6.2" },
+      };
+      assert.deepEqual(
+        decorated(DEPS, known, { github }).map((d) => [d.line, d.text, d.tone]),
+        [
+          [4, "✓ latest · 12 issues", "latest"],
+          [5, "✓ latest", "latest"],
+          [8, "↑ 5.6.2", "outdated"],
+        ],
+      );
+      assert.deepEqual(
+        decorated(DEPS, known, { github, githubPaused: true }).map((d) => [
+          d.line,
+          d.text,
+        ]),
+        [
+          [4, "✓ latest · 12 issues"],
+          [5, "✓ latest · issues ⏸"],
+          [8, "↑ 5.6.2 · issues ⏸"],
+        ],
+      );
+    });
+
+    it("reads issues ⏸ from a rate-limited GitHub result", () => {
+      const github = new Map([
+        ["leftpad", { githubDegrade: "rate_limited" as const }],
+        ["react", { githubUrl: "https://g", issuesDegrade: "rate_limited" as const }],
+        ["typescript", { githubDegrade: "offline" as const }],
+      ]);
+      assert.deepEqual(
+        decorated(DEPS, KNOWN, { github }).map((d) => d.text),
+        ["↑ 2.1.0 · issues ⏸", "✓ latest · issues ⏸", "✓ latest"],
+      );
+    });
+
+    it("shows what is known while the registry lookup is still pending", () => {
+      const github = new Map([["leftpad", { openIssuesCount: 1 }]]);
+      assert.deepEqual(
+        decorated(DEPS, {}, { github }).map((d) => [d.line, d.text, d.tone]),
+        [
+          [4, "1 issue", "neutral"],
+          [5, "…", "pending"],
+          [8, "…", "pending"],
+        ],
+      );
+      assert.deepEqual(
+        decorated(DEPS, {}, { githubPaused: true }).map((d) => [d.text, d.tone]),
+        [
+          ["issues ⏸", "paused"],
+          ["issues ⏸", "paused"],
+          ["issues ⏸", "paused"],
         ],
       );
     });
@@ -310,26 +394,43 @@ describe("buildOverlay", () => {
       );
     });
 
-    it("gives non-registry Dependencies no version note, even while loading", () => {
+    it("shows only a dimmed source label for Dependencies not from npm", () => {
       const text = `{
   "dependencies": {
     "@acme/ui": "workspace:*",
+    "@acme/cfg": "catalog:",
     "local": "file:../local",
-    "fork": "github:me/fork"
+    "linked": "link:../linked",
+    "fork": "github:me/fork",
+    "short": "me/short#main",
+    "remote": "git+https://example.com/r.git",
+    "tarball": "https://example.com/t.tgz"
   }
 }`;
-      assert.deepEqual(decorated(text, {}), []);
+      const expected = [
+        [2, "workspace", "source"],
+        [3, "catalog", "source"],
+        [4, "local", "source"],
+        [5, "local", "source"],
+        [6, "git", "source"],
+        [7, "git", "source"],
+        [8, "git", "source"],
+        [9, "url", "source"],
+      ];
+      const view = (overrides: Partial<OverlayContext>, known = {}) =>
+        decorated(text, known, overrides).map((d) => [d.line, d.text, d.tone]);
+      assert.deepEqual(view({}), expected);
       assert.deepEqual(
-        decorated(text, { "@acme/ui": { latest: "9.9.9" } }),
-        [],
+        view(
+          {
+            githubPaused: true,
+            github: new Map([["fork", { openIssuesCount: 3 }]]),
+          },
+          { "@acme/ui": { latest: "9.9.9" } },
+        ),
+        expected,
       );
     });
-
-    const KNOWN = {
-      leftpad: { latest: "2.1.0" },
-      react: { latest: "18.3.1" },
-      typescript: { latest: "5.3.3" },
-    };
 
     it("follows Dependencies when entries are inserted, removed or reordered", () => {
       const edited = `{
@@ -345,7 +446,7 @@ describe("buildOverlay", () => {
         [
           [2, "✓ latest"],
           [4, "…"],
-          [5, "→ 2.1.0"],
+          [5, "↑ 2.1.0"],
         ],
       );
     });
@@ -386,7 +487,7 @@ describe("buildOverlay", () => {
         decorated(broken, KNOWN).map((d) => [d.line, d.text]),
         [
           [2, "✓ latest"],
-          [3, "→ 2.1.0"],
+          [3, "↑ 2.1.0"],
         ],
       );
     });
@@ -551,6 +652,49 @@ describe("buildOverlay", () => {
       ]);
     });
 
+    const actions = (overrides: Partial<OverlayContext>) =>
+      summaries(BLOCKS, {}, overrides)
+        .filter((lens) => lens.line === 2 && lens.command !== "")
+        .map((lens) => [lens.title, lens.command]);
+
+    it("offers no sign-in while GitHub access is present or not yet known", () => {
+      const refreshOnly = [["↻ Refresh", "packman.refreshEnrichment"]];
+      assert.deepEqual(actions({ githubAccess: "granted" }), refreshOnly);
+      assert.deepEqual(actions({}), refreshOnly);
+      assert.deepEqual(
+        actions({ githubAccess: "granted", githubPaused: true }),
+        refreshOnly,
+      );
+    });
+
+    it("offers a GitHub sign-in in each block while Packman has no GitHub access", () => {
+      assert.deepEqual(actions({ githubAccess: "none" }), [
+        ["Sign in to GitHub for issue counts", "packman.signInToGithub"],
+        ["↻ Refresh", "packman.refreshEnrichment"],
+      ]);
+      assert.equal(
+        summaries(BLOCKS, {}, { githubAccess: "none" }).filter(
+          (lens) => lens.command === "packman.signInToGithub",
+        ).length,
+        2,
+      );
+      assert.deepEqual(titles({}, { githubAccess: "none" }), [
+        "3 deps · 0 outdated",
+        "1 dep · 0 outdated",
+      ]);
+    });
+
+    it("reads GitHub paused · Sign in to GitHub while paused without access", () => {
+      assert.deepEqual(titles({}, { githubAccess: "none", githubPaused: true }), [
+        "3 deps · 0 outdated · GitHub paused",
+        "1 dep · 0 outdated · GitHub paused",
+      ]);
+      assert.deepEqual(actions({ githubAccess: "none", githubPaused: true }), [
+        ["Sign in to GitHub", "packman.signInToGithub"],
+        ["↻ Refresh", "packman.refreshEnrichment"],
+      ]);
+    });
+
     it("summarises read-only views, but not a disabled Overlay or empty blocks", () => {
       assert.equal(
         summaries(BLOCKS, {}, { readOnly: true, trusted: false }).length,
@@ -630,7 +774,7 @@ describe("buildOverlay", () => {
       );
       assert.deepEqual(view(broken).decorations, [
         [6, "✓ latest"],
-        [7, "→ 2.1.0"],
+        [7, "↑ 2.1.0"],
         [8, "✓ latest"],
       ]);
     });
@@ -674,10 +818,32 @@ describe("buildOverlay", () => {
       );
       assert.deepEqual(view(fixed).decorations, [
         [6, "✓ latest"],
-        [7, "→ 2.1.0"],
+        [7, "↑ 2.1.0"],
         [8, "✓ latest"],
         [9, "…"],
       ]);
+    });
+  });
+
+  describe("Dependency signal tones", () => {
+    it("colours each tone from the theme, escalating outdated → major → risky", () => {
+      assert.deepEqual(OVERLAY_TONE_COLORS, {
+        latest: "editorCodeLens.foreground",
+        neutral: "editorCodeLens.foreground",
+        pending: "editorCodeLens.foreground",
+        outdated: "editorInfo.foreground",
+        "outdated-major": "editorWarning.foreground",
+        risk: "editorError.foreground",
+        paused: "disabledForeground",
+        source: "disabledForeground",
+        degraded: "disabledForeground",
+      });
+    });
+
+    it("uses theme colour ids only, never literal colours", () => {
+      for (const color of Object.values(OVERLAY_TONE_COLORS)) {
+        assert.match(color, /^[a-zA-Z]+(\.[a-zA-Z]+)?$/);
+      }
     });
   });
 });

@@ -3,7 +3,7 @@
  *
  * Unauthenticated calls share 60/hour per IP. Spacing requests cannot raise
  * that ceiling — one package.json spends it. This gate stops further repo
- * calls once the budget is exhausted (probe, remaining: 0, or 403/429) until
+ * calls once the budget is exhausted (remaining: 0, or 403/429) until
  * x-ratelimit-reset / Retry-After. A small start gap and in-flight cap only
  * exist to stay under GitHub's secondary (burst) limit after auth.
  */
@@ -11,7 +11,6 @@
 const MIN_INTERVAL_MS = 80;
 const MAX_IN_FLIGHT = 4;
 const DEFAULT_BACKOFF_MS = 60_000;
-const PROBE_TTL_MS = 60_000;
 
 export type GithubSlot =
   | { ok: true; release: () => void; epoch: number }
@@ -24,11 +23,6 @@ export type GithubBudgetOptions = {
   sleep?: (ms: number) => Promise<void>;
 };
 
-type ProbeGate =
-  | { kind: "start"; epoch: number }
-  | { kind: "wait" }
-  | { kind: "skip" };
-
 export class GithubBudget {
   private identity = "anon";
   private epoch = 0;
@@ -36,12 +30,8 @@ export class GithubBudget {
   private allowance = Number.POSITIVE_INFINITY;
   private allowanceResetAt = 0;
   private serverLimited = false;
-  private probedAt = 0;
   /** Bumped only when the server says the core budget is exhausted. */
   private limitVersion = 0;
-  private probing = false;
-  private probeDone: Promise<void> = Promise.resolve();
-  private resolveProbe: (() => void) | undefined;
   private inFlight = 0;
   private nextStartAt = 0;
   private chain: Promise<void> = Promise.resolve();
@@ -61,55 +51,10 @@ export class GithubBudget {
     this.allowance = Number.POSITIVE_INFINITY;
     this.allowanceResetAt = 0;
     this.serverLimited = false;
-    this.probedAt = 0;
-    this.probing = false;
-    const resolve = this.resolveProbe;
-    this.resolveProbe = undefined;
-    resolve?.();
   }
 
   blockedUntilMs(): number | undefined {
     return this.now() < this.blockedUntil ? this.blockedUntil : undefined;
-  }
-
-  tryStartProbe(): ProbeGate {
-    if (this.blockedUntilMs() !== undefined) {
-      return { kind: "skip" };
-    }
-    if (this.probing) {
-      return { kind: "wait" };
-    }
-    if (this.now() - this.probedAt < PROBE_TTL_MS) {
-      return { kind: "skip" };
-    }
-    this.probing = true;
-    this.probeDone = new Promise((resolve) => {
-      this.resolveProbe = resolve;
-    });
-    return { kind: "start", epoch: this.epoch };
-  }
-
-  joinProbe(): Promise<void> {
-    return this.probeDone;
-  }
-
-  finishProbe(epoch: number, apply: () => void): void {
-    if (epoch !== this.epoch || !this.probing) {
-      return;
-    }
-    apply();
-    this.probedAt = this.now();
-    this.endProbe();
-  }
-
-  abandonProbe(epoch: number, stamp: boolean): void {
-    if (epoch !== this.epoch || !this.probing) {
-      return;
-    }
-    if (stamp) {
-      this.probedAt = this.now();
-    }
-    this.endProbe();
   }
 
   noteCoreLimit(remaining: number, resetEpochSec: number): void {
@@ -238,13 +183,6 @@ export class GithubBudget {
       this.armAllowanceBlock();
     }
     return { ok: true, release, epoch: result.epoch };
-  }
-
-  private endProbe(): void {
-    this.probing = false;
-    const resolve = this.resolveProbe;
-    this.resolveProbe = undefined;
-    resolve?.();
   }
 
   private denial(): { ok: false; retryAfterMs: number } | undefined {

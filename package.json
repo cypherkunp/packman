@@ -2,15 +2,14 @@
   "name": "packman",
   "displayName": "Packman",
   "description": "Script runners and dependency intelligence right inside your package.json.",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "publisher": "cypherkunp",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Other",
-    "Visualization"
+    "Other"
   ],
   "keywords": [
     "package.json",
@@ -29,11 +28,9 @@
   },
   "pricing": "Free",
   "activationEvents": [
-    "onCustomEditor:packman.packageJson",
-    "onCommand:packman.openEditMode",
-    "onCommand:packman.openUiMode",
     "onCommand:packman.openSocketSettings",
     "onCommand:packman.openGithubSettings",
+    "onCommand:packman.signInToGithub",
     "onCommand:packman.refreshEnrichment",
     "onLanguage:json",
     "onCommand:packman.toggleOverlay"
@@ -46,29 +43,7 @@
   },
   "main": "./dist/extension.js",
   "contributes": {
-    "customEditors": [
-      {
-        "viewType": "packman.packageJson",
-        "displayName": "Packman",
-        "selector": [
-          {
-            "filenamePattern": "**/package.json"
-          }
-        ],
-        "priority": "option"
-      }
-    ],
     "commands": [
-      {
-        "command": "packman.openEditMode",
-        "title": "Packman: Open in Text Editor",
-        "icon": "$(go-to-file)"
-      },
-      {
-        "command": "packman.openUiMode",
-        "title": "Packman: Open UI Mode",
-        "icon": "$(eye)"
-      },
       {
         "command": "packman.openSocketSettings",
         "title": "Packman: Open Socket Settings"
@@ -76,6 +51,10 @@
       {
         "command": "packman.openGithubSettings",
         "title": "Packman: Open GitHub Settings"
+      },
+      {
+        "command": "packman.signInToGithub",
+        "title": "Packman: Sign in to GitHub"
       },
       {
         "command": "packman.refreshEnrichment",
@@ -87,46 +66,13 @@
         "title": "Packman: Toggle Overlay"
       }
     ],
-    "menus": {
-      "editor/title": [
-        {
-          "command": "packman.openEditMode",
-          "when": "activeCustomEditorId == packman.packageJson",
-          "group": "navigation"
-        },
-        {
-          "command": "packman.refreshEnrichment",
-          "when": "activeCustomEditorId == packman.packageJson",
-          "group": "navigation"
-        },
-        {
-          "command": "packman.openUiMode",
-          "when": "resourceFilename == package.json && activeCustomEditorId != packman.packageJson",
-          "group": "navigation"
-        }
-      ]
-    },
-    "keybindings": [
-      {
-        "command": "packman.openEditMode",
-        "key": "ctrl+shift+m",
-        "mac": "cmd+shift+m",
-        "when": "activeCustomEditorId == packman.packageJson"
-      },
-      {
-        "command": "packman.openUiMode",
-        "key": "ctrl+shift+m",
-        "mac": "cmd+shift+m",
-        "when": "resourceFilename == package.json && activeCustomEditorId != packman.packageJson"
-      }
-    ],
     "configuration": {
       "title": "Packman",
       "properties": {
         "packman.github.token": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Optional GitHub token for Dependency issue counts. When empty, Packman uses the GitHub account signed in to the editor (Accounts menu). Without either, GitHub allows 60 requests/hour per IP — one package.json can exhaust that, and issue counts pause until the window resets. A token or signed-in account raises the limit to 5,000/hour. Public repo metadata needs no scopes."
+          "markdownDescription": "Advanced override: a GitHub token for Dependency issue counts. No setup is needed when you're signed in to GitHub in the editor (Accounts menu): Packman uses that account, which allows 5,000 requests/hour. Until Packman has access, each Block summary offers **Sign in to GitHub**; without access GitHub allows only 60 requests/hour per IP, and issue counts pause when that runs out. Set a token here only to use a different account. Public repo metadata needs no scopes."
         },
         "packman.socket.apiToken": {
           "type": "string",
@@ -141,7 +87,7 @@
         "packman.overlay.enabled": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Show the Packman Overlay in the `package.json` text editor: ▶ Run (or Trust workspace) actions on scripts, latest-version and Socket signals on each Dependency, hovers with GitHub details fetched on hover, and per-block summaries with Refresh. `Packman: Toggle Overlay` hides or shows it for the current session."
+          "markdownDescription": "Show the Packman Overlay in the `package.json` text editor: a ▶ Run action on each script (or one Trust workspace action), a Dependency signal beside each Dependency (latest version, open issues and Socket score), Dependency details on hover, and a Block summary with Refresh above each dependency block. Signals are fetched when you open a `package.json`, type a new Dependency or click Refresh, and cached for an hour. `Packman: Toggle Overlay` hides or shows the Overlay for the current session."
         }
       }
     }
@@ -151,7 +97,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "typecheck": "tsc -p ./ --noEmit",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "tsx --test src/**/*.test.ts scripts/**/*.test.mjs",
     "check": "npm run typecheck && npm test"
   },
   "repository": {

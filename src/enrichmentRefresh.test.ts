@@ -9,13 +9,13 @@ describe("EnrichmentRefresh", () => {
       clears += 1;
     });
     const heard: string[] = [];
-    refresh.onRefresh(() => heard.push("ui mode"));
+    refresh.onRefresh(() => heard.push("hover"));
     refresh.onRefresh(() => heard.push("overlay"));
 
     refresh.refresh();
 
     assert.equal(clears, 1);
-    assert.deepEqual(heard, ["ui mode", "overlay"]);
+    assert.deepEqual(heard, ["hover", "overlay"]);
   });
 
   it("clears before any listener starts refetching", () => {

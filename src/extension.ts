@@ -1,21 +1,15 @@
 import * as vscode from "vscode";
-import { PACKMAN_VIEW_TYPE } from "./openWith";
 import { registerOverlay } from "./overlayController";
-import { PackageJsonEditorProvider } from "./packageJsonEditorProvider";
 import { enrichmentRefresh } from "./sessionState";
+import { promptStaleEditorAssociation } from "./staleEditorAssociation";
+
+const STALE_ASSOCIATION_DISMISSED = "packman.staleEditorAssociationPrompted";
 
 export function activate(context: vscode.ExtensionContext): void {
-  context.subscriptions.push(PackageJsonEditorProvider.register());
   context.subscriptions.push(enrichmentRefresh);
   context.subscriptions.push(registerOverlay());
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("packman.openEditMode", () =>
-      openPackageJsonWith("default"),
-    ),
-    vscode.commands.registerCommand("packman.openUiMode", () =>
-      openPackageJsonWith(PACKMAN_VIEW_TYPE),
-    ),
     vscode.commands.registerCommand("packman.openSocketSettings", async () => {
       await vscode.commands.executeCommand(
         "workbench.action.openSettings",
@@ -28,49 +22,55 @@ export function activate(context: vscode.ExtensionContext): void {
         "packman.github.token",
       );
     }),
-    vscode.authentication.onDidChangeSessions((event) => {
-      if (event.provider.id === "github") {
-        enrichmentRefresh.refresh();
-      }
-    }),
     vscode.commands.registerCommand("packman.refreshEnrichment", () => {
       enrichmentRefresh.refresh();
     }),
   );
+
+  void promptStaleEditorAssociation<AssociationScope>({
+    scopes: () => [
+      { target: vscode.ConfigurationTarget.Global },
+      { target: vscode.ConfigurationTarget.Workspace },
+      ...(vscode.workspace.workspaceFolders ?? []).map((folder) => ({
+        target: vscode.ConfigurationTarget.WorkspaceFolder,
+        folder: folder.uri,
+      })),
+    ],
+    readAssociations: (scope) => {
+      const inspected = vscode.workspace
+        .getConfiguration("workbench", scope.folder)
+        .inspect<Record<string, string>>("editorAssociations");
+      const value =
+        scope.target === vscode.ConfigurationTarget.Global
+          ? inspected?.globalValue
+          : scope.target === vscode.ConfigurationTarget.Workspace
+            ? inspected?.workspaceValue
+            : inspected?.workspaceFolderValue;
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? value
+        : undefined;
+    },
+    writeAssociations: async (scope, value) => {
+      await vscode.workspace
+        .getConfiguration("workbench", scope.folder)
+        .update("editorAssociations", value, scope.target);
+    },
+    showPrompt: (message, action) =>
+      Promise.resolve(vscode.window.showInformationMessage(message, action)),
+    wasDismissed: () =>
+      context.globalState.get<boolean>(STALE_ASSOCIATION_DISMISSED) === true,
+    markDismissed: () =>
+      Promise.resolve(
+        context.globalState.update(STALE_ASSOCIATION_DISMISSED, true),
+      ),
+  }).catch(() => undefined);
 }
 
 export function deactivate(): void {}
 
-async function openPackageJsonWith(
-  viewId: typeof PACKMAN_VIEW_TYPE | "default",
-): Promise<void> {
-  const uri = activePackageJsonUri();
-  if (!uri) {
-    return;
-  }
-  await vscode.commands.executeCommand("vscode.openWith", uri, viewId);
-}
-
-function activePackageJsonUri(): vscode.Uri | undefined {
-  const tabInput = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
-  if (
-    tabInput &&
-    typeof tabInput === "object" &&
-    "uri" in tabInput &&
-    tabInput.uri instanceof vscode.Uri &&
-    isPackageJsonUri(tabInput.uri)
-  ) {
-    return tabInput.uri;
-  }
-
-  const doc = vscode.window.activeTextEditor?.document;
-  if (doc && isPackageJsonUri(doc.uri)) {
-    return doc.uri;
-  }
-
-  return undefined;
-}
-
-function isPackageJsonUri(uri: vscode.Uri): boolean {
-  return /(?:^|[/\\])package\.json$/i.test(uri.fsPath);
-}
+/** A settings level `workbench.editorAssociations` can be set at. */
+type AssociationScope = {
+  target: vscode.ConfigurationTarget;
+  /** The workspace folder, for `WorkspaceFolder`. */
+  folder?: vscode.Uri;
+};

@@ -3,89 +3,73 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { PACKMAN_VIEW_TYPE } from "./openWith";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const manifest = JSON.parse(
   readFileSync(join(root, "package.json"), "utf8"),
 ) as {
   description: string;
+  categories: string[];
   engines: { vscode: string };
   contributes: {
-    customEditors: Array<{
-      viewType: string;
-      selector: Array<{ filenamePattern: string }>;
-      priority: string;
-    }>;
+    customEditors?: unknown;
     commands: Array<{ command: string; title: string }>;
-    menus: { "editor/title": Array<{ command: string; when: string }> };
-    keybindings: Array<{
+    menus?: Record<string, Array<{ command: string; when?: string }>>;
+    keybindings?: Array<{
       command: string;
       key: string;
       mac?: string;
       when: string;
     }>;
     configuration?: {
-      properties?: Record<string, { type?: string; default?: unknown }>;
+      properties?: Record<
+        string,
+        { type?: string; default?: unknown; markdownDescription?: string }
+      >;
     };
   };
   capabilities?: {
-    untrustedWorkspaces?: { supported?: boolean | string };
+    untrustedWorkspaces?: {
+      supported?: boolean | string;
+      description?: string;
+    };
   };
   activationEvents?: string[];
 };
 
 describe("extension manifest", () => {
-  it("contributes Packman UI mode at option priority so package.json opens in the text editor", () => {
-    const editor = manifest.contributes.customEditors[0];
-    assert.equal(editor.viewType, PACKMAN_VIEW_TYPE);
-    assert.equal(editor.priority, "option");
-    assert.equal(editor.selector[0]?.filenamePattern, "**/package.json");
-  });
-
-  it("titles the UI mode → text editor command Open in Text Editor", () => {
-    const command = manifest.contributes.commands.find(
-      (c) => c.command === "packman.openEditMode",
-    );
-    assert.equal(command?.title, "Packman: Open in Text Editor");
+  it("contributes no custom editor, so package.json opens in the text editor", () => {
+    assert.equal(manifest.contributes.customEditors, undefined);
     assert.ok(
-      !manifest.contributes.commands.some((c) => /Edit Mode/i.test(c.title)),
+      !manifest.activationEvents?.some((e) => e.startsWith("onCustomEditor:")),
     );
   });
 
-  it("shows Open in Text Editor and Refresh in UI mode's title bar only", () => {
-    const titleMenus = manifest.contributes.menus["editor/title"];
-    const inUiMode = "activeCustomEditorId == packman.packageJson";
-    for (const command of ["packman.openEditMode", "packman.refreshEnrichment"]) {
-      const entries = titleMenus.filter((m) => m.command === command);
-      assert.equal(entries.length, 1, command);
-      assert.equal(entries[0]?.when, inUiMode, command);
+  it("contributes no UI mode commands, menu entries or activation events", () => {
+    const retired = ["packman.openUiMode", "packman.openEditMode"];
+    const commands = manifest.contributes.commands.map((c) => c.command);
+    const menuCommands = Object.values(manifest.contributes.menus ?? {})
+      .flat()
+      .map((m) => m.command);
+    for (const command of retired) {
+      assert.ok(!commands.includes(command), command);
+      assert.ok(!menuCommands.includes(command), command);
+      assert.ok(
+        !manifest.activationEvents?.includes(`onCommand:${command}`),
+        command,
+      );
     }
-  });
-
-  it("shows Open UI Mode in the text editor's title bar only", () => {
-    const entries = manifest.contributes.menus["editor/title"].filter(
-      (m) => m.command === "packman.openUiMode",
-    );
-    assert.equal(entries.length, 1);
-    assert.equal(
-      entries[0]?.when,
-      "resourceFilename == package.json && activeCustomEditorId != packman.packageJson",
+    assert.ok(
+      !manifest.contributes.commands.some((c) => /UI Mode|Text Editor/i.test(c.title)),
     );
   });
 
-  it("binds Cmd/Ctrl+Shift+M to toggle between the text editor and UI mode", () => {
-    const bindings = manifest.contributes.keybindings;
-    const toText = bindings.find((k) => k.command === "packman.openEditMode");
-    const toUi = bindings.find((k) => k.command === "packman.openUiMode");
-    for (const binding of [toText, toUi]) {
-      assert.equal(binding?.key, "ctrl+shift+m");
-      assert.equal(binding?.mac, "cmd+shift+m");
-    }
-    assert.equal(toText?.when, "activeCustomEditorId == packman.packageJson");
-    assert.equal(
-      toUi?.when,
-      "resourceFilename == package.json && activeCustomEditorId != packman.packageJson",
+  it("binds no Cmd/Ctrl+Shift+M keybinding", () => {
+    const bindings = manifest.contributes.keybindings ?? [];
+    assert.ok(
+      !bindings.some(
+        (k) => k.key === "ctrl+shift+m" || k.mac === "cmd+shift+m",
+      ),
     );
   });
 
@@ -93,14 +77,35 @@ describe("extension manifest", () => {
     assert.match(manifest.description, /right inside your package\.json/);
   });
 
+  it("lists categories that fit an editor Overlay, not Visualization", () => {
+    assert.ok(!manifest.categories.includes("Visualization"));
+    assert.ok(manifest.categories.length > 0);
+  });
+
   it("targets a Cursor-compatible VS Code engine floor", () => {
     assert.match(manifest.engines.vscode, /^\^1\.(8[5-9]|9\d|\d{3,})\./);
   });
 
-  it("contributes optional packman.github.token setting", () => {
+  it("contributes packman.github.token as an override that needs no setup", () => {
     const token =
       manifest.contributes.configuration?.properties?.["packman.github.token"];
     assert.equal(token?.type, "string");
+    assert.equal(token?.default, "");
+    assert.match(
+      token?.markdownDescription ?? "",
+      /No setup is needed when you're signed in to GitHub in the editor/,
+    );
+  });
+
+  it("contributes the GitHub sign-in command the Block summary offers", () => {
+    assert.ok(
+      manifest.contributes.commands.some(
+        (c) => c.command === "packman.signInToGithub",
+      ),
+    );
+    assert.ok(
+      manifest.activationEvents?.includes("onCommand:packman.signInToGithub"),
+    );
   });
 
   it("contributes Socket end-user token settings", () => {
@@ -126,6 +131,29 @@ describe("extension manifest", () => {
         (c) => c.command === "packman.toggleOverlay",
       ),
     );
+  });
+
+  it("describes the Overlay setting with the current fetch policy", () => {
+    const description =
+      manifest.contributes.configuration?.properties?.[
+        "packman.overlay.enabled"
+      ]?.markdownDescription ?? "";
+    assert.match(description, /fetched when you open/);
+    assert.doesNotMatch(description, /fetched on hover/);
+  });
+
+  it("mentions no retired term in user-facing manifest copy", () => {
+    const copy = [
+      manifest.description,
+      manifest.capabilities?.untrustedWorkspaces?.description ?? "",
+      ...manifest.contributes.commands.map((c) => c.title),
+      ...Object.values(manifest.contributes.configuration?.properties ?? {}).map(
+        (p) => p.markdownDescription ?? "",
+      ),
+    ];
+    for (const text of copy) {
+      assert.doesNotMatch(text, /UI mode|Edit mode|Script button/i, text);
+    }
   });
 
   it("runs with limited support in untrusted workspaces so the trust lens can show", () => {

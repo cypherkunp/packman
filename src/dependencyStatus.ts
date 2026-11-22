@@ -1,7 +1,7 @@
 /**
- * Compares a Dependency row's declared range with the registry's latest
- * version, so UI mode can say whether a row needs attention instead of
- * leaving the reader to diff versions by hand.
+ * Compares a Dependency's declared range with the registry's latest
+ * version, so the Overlay can say whether a Dependency needs attention
+ * instead of leaving the reader to diff versions by hand.
  */
 
 export type VersionGap = "major" | "minor" | "patch";

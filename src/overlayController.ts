@@ -2,39 +2,37 @@ import { dirname } from "node:path";
 import * as vscode from "vscode";
 import {
   buildOverlay,
+  OVERLAY_TONE_COLORS,
   overlayDependencies,
   RUN_SCRIPT_COMMAND,
   GITHUB_SETTINGS_COMMAND,
   REFRESH_ENRICHMENT_COMMAND,
+  SIGN_IN_TO_GITHUB_COMMAND,
   SOCKET_SETTINGS_COMMAND,
-  type DependencyEnrichment,
-  type DependencyGithub,
   type OverlayContext,
   type OverlayDecoration,
   type OverlayDecorationTone,
   type OverlayRange,
 } from "./buildOverlay";
-import { githubPart } from "./enrichDependencyRow";
+import { GithubAccess } from "./githubAccess";
 import { formatGithubResetClock, sharedGithubBudget } from "./githubBudget";
-import { shouldFetchGithubOnHover } from "./githubOnHover";
 import { GithubPauseWatch } from "./githubPauseWatch";
 import { isWellFormed } from "./overlayTree";
-import {
-  canRunScriptsFrom,
-  isOverlayTarget,
-  overlayTargetDocuments,
-} from "./overlayTarget";
+import { canRunScriptsFrom, isOverlayTarget } from "./overlayTarget";
 import {
   enrichmentRefresh,
   enrichmentStore,
 } from "./sessionState";
-import { resolveGithubToken } from "./resolveGithubToken";
 import { runScriptFromEditor } from "./runScriptFromEditor";
+import { SignalFetchPolicy, type ShownDocument } from "./signalFetchPolicy";
 import { resolveSocketCredentials } from "./socketCredentials";
 
 const OVERLAY_SETTING = "packman.overlay.enabled";
 const SOCKET_SETTINGS = "packman.socket";
-const REFRESH_DEBOUNCE_MS = 300;
+/** Typing settles this long before typed Dependencies are fetched. */
+const TYPING_DEBOUNCE_MS = 300;
+/** Coalesces re-renders while enrichment results stream in. */
+const RENDER_COALESCE_MS = 50;
 /** How long a hover waits for GitHub before showing its loading note. */
 const HOVER_GITHUB_WAIT_MS = 1_500;
 const HOVER_COMMANDS = [
@@ -42,7 +40,10 @@ const HOVER_COMMANDS = [
   GITHUB_SETTINGS_COMMAND,
   REFRESH_ENRICHMENT_COMMAND,
 ];
-/** How often, while GitHub is paused, summaries check whether it resumed. */
+/**
+ * How often, while GitHub is paused, summaries check whether it resumed.
+ * This only re-renders; a resume never triggers a fetch (ADR 0002).
+ */
 const GITHUB_PAUSE_POLL_MS = 15_000;
 
 /**
@@ -52,7 +53,6 @@ const GITHUB_PAUSE_POLL_MS = 15_000;
 export function registerOverlay(): vscode.Disposable {
   let sessionOverride: boolean | undefined;
   const changed = new vscode.EventEmitter<void>();
-  let debounce: ReturnType<typeof setTimeout> | undefined;
 
   const isEnabled = () =>
     sessionOverride ??
@@ -77,19 +77,17 @@ export function registerOverlay(): vscode.Disposable {
       enabled: isEnabled(),
       trusted: vscode.workspace.isTrusted,
       readOnly: isReadOnly(document),
-      enrichment: enrichmentByName,
+      enrichment: policy.enrichment,
       socketConfigured: socketCredentials().status === "ready",
-      githubPaused: isGithubPaused(),
-      github,
+      githubPaused: policy.githubPaused,
+      githubAccess: githubAccess.status,
+      github: policy.github,
       githubPausedUntil:
         pausedUntil !== undefined
           ? formatGithubResetClock(pausedUntil)
           : undefined,
     };
   };
-
-  /** GitHub enrichment fetched on hover, per Dependency name. */
-  const github = new Map<string, DependencyGithub>();
 
   const socketCredentials = () => {
     const config = vscode.workspace.getConfiguration("packman");
@@ -99,19 +97,6 @@ export function registerOverlay(): vscode.Disposable {
     );
   };
 
-  /** Re-render summaries when the GitHub budget blocks or resumes. */
-  const githubPauseWatch = new GithubPauseWatch({
-    isPaused: isGithubPaused,
-    onChange: () => changed.fire(),
-    setTimer: (callback) => setInterval(callback, GITHUB_PAUSE_POLL_MS),
-    clearTimer: (timer) => clearInterval(timer),
-  });
-
-  /** Eager enrichment per Dependency name, degraded results included. */
-  const enrichmentByName = new Map<string, DependencyEnrichment>();
-  /** Names already sent to eager enrichment, so edits don't refetch. */
-  const requested = new Set<string>();
-  let enrichAbort = new AbortController();
   const decorationTypes = createDecorationTypes();
 
   const overlayEditors = () =>
@@ -138,62 +123,89 @@ export function registerOverlay(): vscode.Disposable {
   };
 
   /**
-   * Eager path (npm, plus Socket when configured) for names not seen yet in
-   * `documents`; visible editors by default.
+   * GitHub access needs no setup: the token setting, else the editor's
+   * signed-in account. Only the Block summary's sign-in click prompts; a
+   * granted click re-fetches GitHub data for the visible editors. Sessions
+   * changed elsewhere only take effect at the next user-driven fetch.
    */
-  const enrichNewDependencies = (
-    documents: readonly vscode.TextDocument[] = overlayEditors().map(
-      (editor) => editor.document,
-    ),
-  ) => {
-    if (!isEnabled()) {
-      return;
-    }
-    const rows = documents
-      .flatMap((document) => overlayDependencies(document.getText()))
-      .filter((row) => !requested.has(row.name));
-    if (rows.length === 0) {
-      return;
-    }
-    for (const row of rows) {
-      requested.add(row.name);
-    }
-    const signal = enrichAbort.signal;
-    void enrichmentStore
-      .enrichEager(rows, { signal, socket: socketCredentials() })
-      .then((enriched) => {
-        if (signal.aborted) {
-          return;
-        }
-        for (const [name, row] of enriched) {
-          enrichmentByName.set(name, row);
-          // Let a later pass retry lookups that failed outright.
-          if (!row.latest && row.latestDegrade) {
-            requested.delete(name);
-          }
-        }
-        renderDecorations();
-        changed.fire();
-      })
-      .catch(() => {
-        for (const row of rows) {
-          requested.delete(row.name);
-        }
-      });
-  };
+  const githubAccess = new GithubAccess({
+    configuredToken: () =>
+      vscode.workspace.getConfiguration("packman").get<string>("github.token"),
+    getSession: (scopes, { interactive }) =>
+      vscode.authentication.getSession(
+        "github",
+        scopes,
+        interactive ? { createIfNone: true } : { silent: true },
+      ),
+    onGranted: () => whenEnabled(() => policy.signedIn(visibleDocuments())),
+    onChange: () => renderOverlay(),
+  });
 
-  /** Drop every enrichment result and start over (Refresh, Socket change). */
-  const reenrich = () => {
-    enrichAbort.abort();
-    enrichAbort = new AbortController();
-    enrichmentByName.clear();
-    requested.clear();
-    github.clear();
+  /**
+   * Signals are fetched strictly on user action (ADR 0002): an editor is
+   * shown, a Dependency is typed, Refresh, Sign in to GitHub, or a Socket
+   * settings change.
+   */
+  const policy = new SignalFetchPolicy({
+    store: enrichmentStore,
+    budget: sharedGithubBudget,
+    socket: socketCredentials,
+    githubToken: () => githubAccess.token(),
+    onChange: () => renderOverlaySoon(),
+  });
+
+  /**
+   * Re-render when the GitHub budget blocks or resumes: summaries show
+   * `GitHub paused` and signals `issues ⏸`. A resume never fetches.
+   */
+  const githubPauseWatch = new GithubPauseWatch({
+    isPaused: () => policy.githubPaused,
+    onChange: () => renderOverlaySoon(),
+    setTimer: (callback) => setInterval(callback, GITHUB_PAUSE_POLL_MS),
+    clearTimer: (timer) => clearInterval(timer),
+  });
+
+  /**
+   * The one way the Overlay is re-rendered (lenses, decorations, and the
+   * paused state). It never fetches.
+   */
+  const renderOverlay = () => {
+    githubPauseWatch.check();
     changed.fire();
     renderDecorations();
-    // Every open package.json, not only visible ones, so background tabs
-    // don't come back with nothing known after a Refresh.
-    enrichNewDependencies(overlayTargetDocuments(vscode.workspace.textDocuments));
+  };
+  /** Coalesces renders while enrichment results stream in. */
+  let renderTimer: ReturnType<typeof setTimeout> | undefined;
+  const renderOverlaySoon = () => {
+    renderTimer ??= setTimeout(() => {
+      renderTimer = undefined;
+      renderOverlay();
+    }, RENDER_COALESCE_MS);
+  };
+
+  const shownDocument = (editor: vscode.TextEditor): ShownDocument => ({
+    text: editor.document.getText(),
+    visibleRanges: editor.visibleRanges.map((range) => ({
+      start: range.start.line,
+      end: range.end.line + 1,
+    })),
+  });
+  const visibleDocuments = () => overlayEditors().map(shownDocument);
+  const whenEnabled = (fetch: () => Promise<void>) => {
+    if (isEnabled()) {
+      void fetch().catch(() => undefined);
+    }
+  };
+
+  /** Editors visible after the last change, so only newly shown ones fetch. */
+  let visibleUris = new Set<string>();
+  const fetchNewlyShown = () => {
+    const editors = overlayEditors();
+    const shown = editors.filter(
+      (editor) => !visibleUris.has(editor.document.uri.toString()),
+    );
+    visibleUris = new Set(editors.map((editor) => editor.document.uri.toString()));
+    whenEnabled(() => policy.shown(shown.map(shownDocument)));
   };
 
   const codeLensProvider: vscode.CodeLensProvider = {
@@ -214,33 +226,6 @@ export function registerOverlay(): vscode.Disposable {
     },
   };
 
-  /**
-   * GitHub-only path for one Dependency, on hover only. The store caches
-   * loaded results and the shared budget gates every request.
-   */
-  const loadGithub = async (name: string, range: string): Promise<void> => {
-    const config = vscode.workspace.getConfiguration("packman");
-    const githubToken = await resolveGithubToken(
-      config.get<string>("github.token"),
-      (scopes) =>
-        vscode.authentication.getSession("github", scopes, { silent: true }),
-    );
-    sharedGithubBudget.setIdentity(githubToken);
-    const signal = enrichAbort.signal;
-    const enriched = await enrichmentStore.enrichGithub(
-      { name, range },
-      { githubToken, githubBudget: sharedGithubBudget, signal },
-    );
-    if (signal.aborted) {
-      return;
-    }
-    github.set(name, githubPart(enriched));
-    if (!enrichmentByName.has(name) && (enriched.latest || enriched.latestDegrade)) {
-      enrichmentByName.set(name, enriched);
-      renderDecorations();
-    }
-  };
-
   const hoverProvider: vscode.HoverProvider = {
     async provideHover(document, position) {
       if (!isOverlayTarget(document.uri.path)) {
@@ -253,21 +238,16 @@ export function registerOverlay(): vscode.Disposable {
       if (!target) {
         return undefined;
       }
-      const cached = github.get(target.dependency);
-      if (shouldFetchGithubOnHover(cached, isGithubPaused())) {
-        const range =
-          overlayDependencies(text).find(
-            (row) => row.name === target.dependency,
-          )?.range ?? "";
-        const loading = loadGithub(target.dependency, range)
-          .catch(() => undefined)
-          // A blocked budget shows `GitHub paused` in summaries at once.
-          .finally(() => githubPauseWatch.check());
-        await Promise.race([
-          loading,
-          new Promise((resolve) => setTimeout(resolve, HOVER_GITHUB_WAIT_MS)),
-        ]);
-      }
+      const range =
+        overlayDependencies(text).find((row) => row.name === target.dependency)
+          ?.range ?? "";
+      const loading = policy
+        .hover({ name: target.dependency, range })
+        .catch(() => undefined);
+      await Promise.race([
+        loading,
+        new Promise((resolve) => setTimeout(resolve, HOVER_GITHUB_WAIT_MS)),
+      ]);
       const hover = buildOverlay(text, contextFor(document)).hovers.find(
         (entry) => entry.dependency === target.dependency,
       );
@@ -280,29 +260,60 @@ export function registerOverlay(): vscode.Disposable {
     },
   };
 
-  const refresh = () => {
-    githubPauseWatch.check();
-    changed.fire();
-    renderDecorations();
-    enrichNewDependencies();
-  };
-  const refreshSoon = () => {
-    if (debounce) {
-      clearTimeout(debounce);
+  /**
+   * A `package.json` changed: after the debounce, re-render and fetch only
+   * Dependency names never seen, and only for documents shown in a visible
+   * editor (on-screen ones first). A background tab changed on disk (npm
+   * install, git checkout) fetches nothing until it is shown.
+   */
+  const changedDocuments = new Set<vscode.TextDocument>();
+  let typingDebounce: ReturnType<typeof setTimeout> | undefined;
+  const fetchTypedDependenciesSoon = (document: vscode.TextDocument) => {
+    changedDocuments.add(document);
+    if (typingDebounce) {
+      clearTimeout(typingDebounce);
     }
-    debounce = setTimeout(refresh, REFRESH_DEBOUNCE_MS);
+    typingDebounce = setTimeout(() => {
+      renderOverlay();
+      const documents = new Set(changedDocuments);
+      changedDocuments.clear();
+      const shown = new Set<vscode.TextDocument>();
+      for (const editor of overlayEditors()) {
+        if (!documents.has(editor.document) || shown.has(editor.document)) {
+          continue;
+        }
+        shown.add(editor.document);
+        whenEnabled(() => policy.dependenciesTyped(shownDocument(editor)));
+      }
+    }, TYPING_DEBOUNCE_MS);
   };
 
-  refresh();
+  /** Turning the Overlay on shows every visible editor's signals again. */
+  const overlayShownAgain = () => {
+    renderOverlay();
+    visibleUris = new Set();
+    fetchNewlyShown();
+  };
+
+  renderOverlay();
+  fetchNewlyShown();
 
   return vscode.Disposable.from(
     changed,
-    { dispose: () => debounce && clearTimeout(debounce) },
-    { dispose: () => enrichAbort.abort() },
+    { dispose: () => typingDebounce && clearTimeout(typingDebounce) },
+    { dispose: () => renderTimer && clearTimeout(renderTimer) },
+    { dispose: () => policy.dispose() },
     githubPauseWatch,
     ...decorationTypes.values(),
-    vscode.window.onDidChangeVisibleTextEditors(refresh),
-    enrichmentRefresh.onRefresh(reenrich),
+    vscode.window.onDidChangeVisibleTextEditors(() => {
+      renderOverlay();
+      fetchNewlyShown();
+    }),
+    // Refresh covers visible package.json editors only; the store and cache
+    // are already cleared, so others fetch again when they are shown.
+    enrichmentRefresh.onRefresh(() =>
+      whenEnabled(() => policy.refresh(visibleDocuments())),
+    ),
     vscode.languages.registerCodeLensProvider(
       [{ pattern: "**/package.json" }],
       codeLensProvider,
@@ -313,26 +324,34 @@ export function registerOverlay(): vscode.Disposable {
     ),
     vscode.workspace.onDidChangeTextDocument((event) => {
       if (isOverlayTarget(event.document.uri.path)) {
-        refreshSoon();
+        fetchTypedDependenciesSoon(event.document);
       }
     }),
     vscode.workspace.onDidCloseTextDocument((document) => {
       lastGoodTexts.delete(document.uri.toString());
     }),
-    vscode.workspace.onDidGrantWorkspaceTrust(refresh),
-    vscode.window.tabGroups.onDidChangeTabs(refresh),
+    vscode.workspace.onDidGrantWorkspaceTrust(renderOverlay),
+    vscode.window.tabGroups.onDidChangeTabs(renderOverlay),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration(OVERLAY_SETTING)) {
         sessionOverride = undefined;
-        refresh();
+        overlayShownAgain();
       }
       if (event.affectsConfiguration(SOCKET_SETTINGS)) {
-        reenrich();
+        whenEnabled(() => policy.socketChanged(visibleDocuments()));
+      }
+    }),
+    vscode.commands.registerCommand(SIGN_IN_TO_GITHUB_COMMAND, () =>
+      githubAccess.signIn(),
+    ),
+    vscode.authentication.onDidChangeSessions((event) => {
+      if (event.provider.id === "github") {
+        void githubAccess.sessionsChanged().catch(() => undefined);
       }
     }),
     vscode.commands.registerCommand("packman.toggleOverlay", () => {
       sessionOverride = !isEnabled();
-      refresh();
+      overlayShownAgain();
     }),
     vscode.commands.registerCommand(
       RUN_SCRIPT_COMMAND,
@@ -349,29 +368,17 @@ export function registerOverlay(): vscode.Disposable {
   );
 }
 
-function isGithubPaused(): boolean {
-  return sharedGithubBudget.blockedUntilMs() !== undefined;
-}
-
-const TONE_COLORS: Record<OverlayDecorationTone, string> = {
-  outdated: "editorWarning.foreground",
-  latest: "editorCodeLens.foreground",
-  pending: "editorCodeLens.foreground",
-  degraded: "disabledForeground",
-  risk: "editorError.foreground",
-};
-
 /** One end-of-line decoration type per tone, coloured by the theme only. */
 function createDecorationTypes(): Map<
   OverlayDecorationTone,
   vscode.TextEditorDecorationType
 > {
   return new Map(
-    (Object.keys(TONE_COLORS) as OverlayDecorationTone[]).map((tone) => [
+    (Object.keys(OVERLAY_TONE_COLORS) as OverlayDecorationTone[]).map((tone) => [
       tone,
       vscode.window.createTextEditorDecorationType({
         after: {
-          color: new vscode.ThemeColor(TONE_COLORS[tone]),
+          color: new vscode.ThemeColor(OVERLAY_TONE_COLORS[tone]),
           margin: "0 0 0 2ch",
         },
         rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,

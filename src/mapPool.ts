@@ -33,5 +33,5 @@ export async function mapPool<T, R>(
   return results;
 }
 
-/** Default parallel Dependency row enrichments. */
+/** Default parallel Dependency enrichments. */
 export const ENRICHMENT_CONCURRENCY = 6;
