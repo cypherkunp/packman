@@ -38,7 +38,7 @@ export type GithubEnrichmentOptions = {
 
 /**
  * Process-wide Dependency enrichment, keyed by Dependency name and layered
- * over the EnrichmentCache, so the Overlay, hovers and UI mode share one
+ * over the EnrichmentCache, so the Overlay and its hovers share one
  * fetch per package. A changed range never refetches.
  */
 export class EnrichmentStore {

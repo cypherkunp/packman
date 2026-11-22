@@ -1,7 +1,7 @@
 /**
  * The Refresh signal for Dependency enrichment. It owns the clear: shared
- * enrichment is dropped exactly once, before any surface (UI mode, the
- * Overlay) is told to refetch, so no surface clears away another's
+ * enrichment is dropped exactly once, before any listener (the Overlay,
+ * its hovers) is told to refetch, so no listener clears away another's
  * in-flight results.
  */
 export class EnrichmentRefresh {
