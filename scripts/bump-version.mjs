@@ -3,7 +3,8 @@
 // that was just made. Run by pre-commit at the post-commit stage (see
 // .pre-commit-config.yaml).
 //
-//   type!: or a BREAKING CHANGE footer   -> major
+//   type!: or a BREAKING CHANGE footer   -> major (minor while below 1.0.0,
+//                                           per semver's 0.y.z convention)
 //   feat                                 -> minor
 //   fix, perf                            -> patch
 //   any other type, or no match          -> no bump
@@ -50,7 +51,9 @@ export function bump(version, level) {
   const m = SEMVER.exec(version);
   if (!m) throw new Error(`version "${version}" is not MAJOR.MINOR.PATCH`);
   const [major, minor, patch] = m.slice(1).map(Number);
-  if (level === "major") return `${major + 1}.0.0`;
+  // Below 1.0.0 the API is unstable by definition, so a breaking change moves
+  // the minor version (0.0.4 -> 0.1.0) rather than declaring 1.0.0.
+  if (level === "major") return major === 0 ? `0.${minor + 1}.0` : `${major + 1}.0.0`;
   if (level === "minor") return `${major}.${minor + 1}.0`;
   return `${major}.${minor}.${patch + 1}`;
 }

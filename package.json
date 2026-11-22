@@ -97,7 +97,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "typecheck": "tsc -p ./ --noEmit",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "tsx --test src/**/*.test.ts scripts/**/*.test.mjs",
     "check": "npm run typecheck && npm test"
   },
   "repository": {
