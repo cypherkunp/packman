@@ -79,7 +79,7 @@ describe("SignalFetchPolicy", () => {
     const before = world.calls.length;
 
     world.advance(HOUR + 1);
-    await world.policy.edited({ text: PACKAGE });
+    await world.policy.dependenciesTyped({ text: PACKAGE });
     assert.equal(world.calls.length, before);
 
     await world.policy.shown([{ text: PACKAGE }]);
@@ -100,7 +100,7 @@ describe("SignalFetchPolicy", () => {
     ).replace(`"gamma": "^1.0.0"`, `"gamma": "^1.0.0",\n    "eta": "^1.0.0"`);
 
     // Only `eta` (line 9) is on screen.
-    await world.policy.edited({
+    await world.policy.dependenciesTyped({
       text: edited,
       visibleRanges: [{ start: 9, end: 10 }],
     });
@@ -241,7 +241,7 @@ describe("SignalFetchPolicy", () => {
     const before = world.calls.length;
 
     world.setOffline(false);
-    await world.policy.edited({ text: OTHER });
+    await world.policy.dependenciesTyped({ text: OTHER });
     assert.equal(world.calls.length, before);
     assert.equal(world.policy.enrichment.get("delta")?.latestDegrade, "offline");
 

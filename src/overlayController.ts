@@ -29,7 +29,8 @@ import { resolveSocketCredentials } from "./socketCredentials";
 
 const OVERLAY_SETTING = "packman.overlay.enabled";
 const SOCKET_SETTINGS = "packman.socket";
-const REFRESH_DEBOUNCE_MS = 300;
+/** Typing settles this long before typed Dependencies are fetched. */
+const TYPING_DEBOUNCE_MS = 300;
 /** Coalesces re-renders while enrichment results stream in. */
 const RENDER_COALESCE_MS = 50;
 /** How long a hover waits for GitHub before showing its loading note. */
@@ -52,7 +53,6 @@ const GITHUB_PAUSE_POLL_MS = 15_000;
 export function registerOverlay(): vscode.Disposable {
   let sessionOverride: boolean | undefined;
   const changed = new vscode.EventEmitter<void>();
-  let debounce: ReturnType<typeof setTimeout> | undefined;
 
   const isEnabled = () =>
     sessionOverride ??
@@ -79,8 +79,8 @@ export function registerOverlay(): vscode.Disposable {
       readOnly: isReadOnly(document),
       enrichment: policy.enrichment,
       socketConfigured: socketCredentials().status === "ready",
-      githubPaused: isGithubPaused(),
-      githubAccess: githubAccess.hasAccess,
+      githubPaused: policy.githubPaused,
+      githubAccess: githubAccess.status,
       github: policy.github,
       githubPausedUntil:
         pausedUntil !== undefined
@@ -96,18 +96,6 @@ export function registerOverlay(): vscode.Disposable {
       config.get<string>("socket.orgSlug"),
     );
   };
-
-  /** Re-render summaries when the GitHub budget blocks or resumes. */
-  const githubPauseWatch = new GithubPauseWatch({
-    isPaused: isGithubPaused,
-    onChange: () => {
-      changed.fire();
-      // Signals show `issues ⏸` while paused.
-      renderDecorations();
-    },
-    setTimer: (callback) => setInterval(callback, GITHUB_PAUSE_POLL_MS),
-    clearTimer: (timer) => clearInterval(timer),
-  });
 
   const decorationTypes = createDecorationTypes();
 
@@ -150,29 +138,50 @@ export function registerOverlay(): vscode.Disposable {
         interactive ? { createIfNone: true } : { silent: true },
       ),
     onGranted: () => whenEnabled(() => policy.signedIn(visibleDocuments())),
-    onChange: () => changed.fire(),
+    onChange: () => renderOverlay(),
   });
 
   /**
    * Signals are fetched strictly on user action (ADR 0002): an editor is
-   * shown, a Dependency is typed, Refresh, or a Socket settings change.
+   * shown, a Dependency is typed, Refresh, Sign in to GitHub, or a Socket
+   * settings change.
    */
-  let renderTimer: ReturnType<typeof setTimeout> | undefined;
   const policy = new SignalFetchPolicy({
     store: enrichmentStore,
     budget: sharedGithubBudget,
     socket: socketCredentials,
     githubToken: () => githubAccess.token(),
-    onChange: () => {
-      renderTimer ??= setTimeout(() => {
-        renderTimer = undefined;
-        // A blocked budget shows `GitHub paused` in summaries at once.
-        githubPauseWatch.check();
-        renderDecorations();
-        changed.fire();
-      }, RENDER_COALESCE_MS);
-    },
+    onChange: () => renderOverlaySoon(),
   });
+
+  /**
+   * Re-render when the GitHub budget blocks or resumes: summaries show
+   * `GitHub paused` and signals `issues ⏸`. A resume never fetches.
+   */
+  const githubPauseWatch = new GithubPauseWatch({
+    isPaused: () => policy.githubPaused,
+    onChange: () => renderOverlaySoon(),
+    setTimer: (callback) => setInterval(callback, GITHUB_PAUSE_POLL_MS),
+    clearTimer: (timer) => clearInterval(timer),
+  });
+
+  /**
+   * The one way the Overlay is re-rendered (lenses, decorations, and the
+   * paused state). It never fetches.
+   */
+  const renderOverlay = () => {
+    githubPauseWatch.check();
+    changed.fire();
+    renderDecorations();
+  };
+  /** Coalesces renders while enrichment results stream in. */
+  let renderTimer: ReturnType<typeof setTimeout> | undefined;
+  const renderOverlaySoon = () => {
+    renderTimer ??= setTimeout(() => {
+      renderTimer = undefined;
+      renderOverlay();
+    }, RENDER_COALESCE_MS);
+  };
 
   const shownDocument = (editor: vscode.TextEditor): ShownDocument => ({
     text: editor.document.getText(),
@@ -251,58 +260,53 @@ export function registerOverlay(): vscode.Disposable {
     },
   };
 
-  /** Re-render only; never fetches. */
-  const rerender = () => {
-    githubPauseWatch.check();
-    changed.fire();
-    renderDecorations();
-  };
   /**
-   * Typing: after the debounce, fetch only Dependency names never seen, and
-   * only for documents shown in a visible editor (on-screen ones first).
-   * A background tab changed on disk (npm install, git checkout) fetches
-   * nothing until it is shown.
+   * A `package.json` changed: after the debounce, re-render and fetch only
+   * Dependency names never seen, and only for documents shown in a visible
+   * editor (on-screen ones first). A background tab changed on disk (npm
+   * install, git checkout) fetches nothing until it is shown.
    */
-  const edited = new Set<vscode.TextDocument>();
-  const editedSoon = (document: vscode.TextDocument) => {
-    edited.add(document);
-    if (debounce) {
-      clearTimeout(debounce);
+  const changedDocuments = new Set<vscode.TextDocument>();
+  let typingDebounce: ReturnType<typeof setTimeout> | undefined;
+  const fetchTypedDependenciesSoon = (document: vscode.TextDocument) => {
+    changedDocuments.add(document);
+    if (typingDebounce) {
+      clearTimeout(typingDebounce);
     }
-    debounce = setTimeout(() => {
-      rerender();
-      const documents = new Set(edited);
-      edited.clear();
+    typingDebounce = setTimeout(() => {
+      renderOverlay();
+      const documents = new Set(changedDocuments);
+      changedDocuments.clear();
       const shown = new Set<vscode.TextDocument>();
       for (const editor of overlayEditors()) {
         if (!documents.has(editor.document) || shown.has(editor.document)) {
           continue;
         }
         shown.add(editor.document);
-        whenEnabled(() => policy.edited(shownDocument(editor)));
+        whenEnabled(() => policy.dependenciesTyped(shownDocument(editor)));
       }
-    }, REFRESH_DEBOUNCE_MS);
+    }, TYPING_DEBOUNCE_MS);
   };
 
   /** Turning the Overlay on shows every visible editor's signals again. */
   const overlayShownAgain = () => {
-    rerender();
+    renderOverlay();
     visibleUris = new Set();
     fetchNewlyShown();
   };
 
-  rerender();
+  renderOverlay();
   fetchNewlyShown();
 
   return vscode.Disposable.from(
     changed,
-    { dispose: () => debounce && clearTimeout(debounce) },
+    { dispose: () => typingDebounce && clearTimeout(typingDebounce) },
     { dispose: () => renderTimer && clearTimeout(renderTimer) },
     { dispose: () => policy.dispose() },
     githubPauseWatch,
     ...decorationTypes.values(),
     vscode.window.onDidChangeVisibleTextEditors(() => {
-      rerender();
+      renderOverlay();
       fetchNewlyShown();
     }),
     // Refresh covers visible package.json editors only; the store and cache
@@ -320,14 +324,14 @@ export function registerOverlay(): vscode.Disposable {
     ),
     vscode.workspace.onDidChangeTextDocument((event) => {
       if (isOverlayTarget(event.document.uri.path)) {
-        editedSoon(event.document);
+        fetchTypedDependenciesSoon(event.document);
       }
     }),
     vscode.workspace.onDidCloseTextDocument((document) => {
       lastGoodTexts.delete(document.uri.toString());
     }),
-    vscode.workspace.onDidGrantWorkspaceTrust(rerender),
-    vscode.window.tabGroups.onDidChangeTabs(rerender),
+    vscode.workspace.onDidGrantWorkspaceTrust(renderOverlay),
+    vscode.window.tabGroups.onDidChangeTabs(renderOverlay),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration(OVERLAY_SETTING)) {
         sessionOverride = undefined;
@@ -362,10 +366,6 @@ export function registerOverlay(): vscode.Disposable {
       },
     ),
   );
-}
-
-function isGithubPaused(): boolean {
-  return sharedGithubBudget.blockedUntilMs() !== undefined;
 }
 
 /** One end-of-line decoration type per tone, coloured by the theme only. */

@@ -6,6 +6,7 @@ import type {
   EnrichedDependency,
 } from "./enrichDependency";
 import { npmPackageUrl } from "./fetchNpmLatest";
+import type { GithubAccessStatus } from "./githubAccess";
 import {
   DEPENDENCY_BAGS,
   overlayRoot,
@@ -98,11 +99,11 @@ export type OverlayContext = {
   /** The shared GitHub budget is blocked (rate-limited). */
   githubPaused?: boolean;
   /**
-   * Packman has GitHub access (a token setting or the editor's signed-in
-   * account). `false` adds a sign-in action to block summaries; `undefined`
-   * (not resolved yet) adds nothing.
+   * Whether Packman has GitHub access (a token setting or the editor's
+   * signed-in account). `none` adds a sign-in action to block summaries;
+   * `unknown` (the default, not resolved yet) adds nothing.
    */
-  githubAccess?: boolean;
+  githubAccess?: GithubAccessStatus;
   /**
    * GitHub enrichment loaded on hover, per Dependency name. A name with no
    * entry has not loaded yet and its hover shows a loading note.
@@ -266,7 +267,7 @@ function blockSummaryLenses(
     }
     const range = toRange(block.parent);
     const signIn: OverlayLens[] =
-      context.githubAccess === false
+      context.githubAccess === "none"
         ? [
             {
               range,

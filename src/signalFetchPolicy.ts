@@ -15,6 +15,14 @@ import { ENRICHMENT_CONCURRENCY, mapPool } from "./mapPool";
 import type { Dependency } from "./overlayTree";
 import type { SocketCredentials } from "./socketCredentials";
 
+/** What one GitHub request for a Dependency is made with. */
+type GithubRequest = {
+  githubToken: string | undefined;
+  signal: AbortSignal;
+  /** Bypass stored and cached GitHub results. */
+  forceRefresh?: boolean;
+};
+
 /** A `package.json` editor as the fetch policy sees it. */
 export type ShownDocument = {
   text: string;
@@ -59,7 +67,7 @@ export class SignalFetchPolicy {
 
   /**
    * The shared GitHub budget is blocked. Nothing retries when it resumes:
-   * paused Dependencies wait for the next show, edit or Refresh.
+   * paused Dependencies wait for the next show or Refresh.
    */
   get githubPaused(): boolean {
     return this.options.budget.blockedUntilMs() !== undefined;
@@ -71,11 +79,11 @@ export class SignalFetchPolicy {
   }
 
   /**
-   * A `package.json` was edited (after the debounce): only Dependency names
-   * never fetched before are fetched. Expired or failed ones wait until the
-   * file is shown again, or Refresh.
+   * Dependencies were typed into a visible `package.json` (after the
+   * debounce): only Dependency names never fetched before are fetched.
+   * Expired or failed ones wait until the file is shown again, or Refresh.
    */
-  async edited(document: ShownDocument): Promise<void> {
+  async dependenciesTyped(document: ShownDocument): Promise<void> {
     const rows = overlayDependenciesVisibleFirst(
       document.text,
       document.visibleRanges,
@@ -128,16 +136,7 @@ export class SignalFetchPolicy {
     for (const row of rows) {
       this.requested.add(row.name);
     }
-    const signal = this.abort.signal;
-    const githubToken = await this.options.githubToken();
-    this.options.budget.setIdentity(githubToken);
-    await mapPool(
-      rows,
-      ENRICHMENT_CONCURRENCY,
-      (row) =>
-        this.loadGithub(row, { githubToken, signal, forceRefresh: true }),
-      signal,
-    );
+    await this.loadGithubAll(rows, this.abort.signal, { forceRefresh: true });
   }
 
   /**
@@ -151,8 +150,7 @@ export class SignalFetchPolicy {
     }
     this.requested.add(row.name);
     const signal = this.abort.signal;
-    const githubToken = await this.options.githubToken();
-    this.options.budget.setIdentity(githubToken);
+    const githubToken = await this.githubIdentity();
     await this.loadGithub(row, { githubToken, signal });
   }
 
@@ -194,11 +192,28 @@ export class SignalFetchPolicy {
       this.enrichmentByName.set(name, enrichmentOf(row));
     }
     this.options.onChange();
+    await this.loadGithubAll(ordered, signal, options);
+  }
 
+  /**
+   * The token for the next GitHub requests; the budget follows its
+   * identity, so a new account starts unblocked.
+   */
+  private async githubIdentity(): Promise<string | undefined> {
     const githubToken = await this.options.githubToken();
     this.options.budget.setIdentity(githubToken);
+    return githubToken;
+  }
+
+  /** GitHub requests for `rows`, in order, a few at a time. */
+  private async loadGithubAll(
+    rows: readonly Dependency[],
+    signal: AbortSignal,
+    options: { forceRefresh?: boolean },
+  ): Promise<void> {
+    const githubToken = await this.githubIdentity();
     await mapPool(
-      ordered,
+      rows,
       ENRICHMENT_CONCURRENCY,
       (row) =>
         this.loadGithub(row, {
@@ -213,19 +228,15 @@ export class SignalFetchPolicy {
   /** One GitHub request through the budget; paused, with none, once blocked. */
   private async loadGithub(
     row: Dependency,
-    options: {
-      githubToken: string | undefined;
-      signal: AbortSignal;
-      forceRefresh?: boolean;
-    },
+    request: GithubRequest,
   ): Promise<void> {
     const enriched = this.githubPaused
       ? pausedRow(this.options.store, row)
       : await this.options.store.enrichGithub(row, {
-          ...options,
+          ...request,
           githubBudget: this.options.budget,
         });
-    if (options.signal.aborted) {
+    if (request.signal.aborted) {
       return;
     }
     this.githubByName.set(row.name, githubPart(enriched));

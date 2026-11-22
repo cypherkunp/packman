@@ -45,21 +45,21 @@ function harness(
 describe("GithubAccess", () => {
   it("is unknown until a token is resolved, then follows token precedence", async () => {
     const withSetting = harness({ configured: " pat ", silent: "session" });
-    assert.equal(withSetting.access.hasAccess, undefined);
+    assert.equal(withSetting.access.status, "unknown");
     assert.equal(await withSetting.access.token(), "pat");
-    assert.equal(withSetting.access.hasAccess, true);
+    assert.equal(withSetting.access.status, "granted");
     assert.deepEqual(withSetting.requests, []);
 
     const signedIn = harness({ silent: "session" });
     assert.equal(await signedIn.access.token(), "session");
-    assert.equal(signedIn.access.hasAccess, true);
+    assert.equal(signedIn.access.status, "granted");
     assert.deepEqual(signedIn.requests, [
       { scopes: ["read:user"], interactive: false },
     ]);
 
     const none = harness();
     assert.equal(await none.access.token(), undefined);
-    assert.equal(none.access.hasAccess, false);
+    assert.equal(none.access.status, "none");
     assert.equal(none.events.changed, 1);
   });
 
@@ -86,7 +86,7 @@ describe("GithubAccess", () => {
       requests.filter((request) => request.interactive),
       [{ scopes: ["read:user"], interactive: true }],
     );
-    assert.equal(access.hasAccess, true);
+    assert.equal(access.status, "granted");
     assert.equal(events.granted, 1);
     assert.equal(await access.token(), "granted");
   });
@@ -96,7 +96,7 @@ describe("GithubAccess", () => {
     await declined.access.token();
     await declined.access.signIn();
     assert.equal(declined.events.granted, 0);
-    assert.equal(declined.access.hasAccess, false);
+    assert.equal(declined.access.status, "none");
 
     const failed = harness({
       interactive: async () => {
@@ -106,7 +106,7 @@ describe("GithubAccess", () => {
     await failed.access.token();
     await failed.access.signIn();
     assert.equal(failed.events.granted, 0);
-    assert.equal(failed.access.hasAccess, false);
+    assert.equal(failed.access.status, "none");
   });
 
   it("never re-fetches when access appears from elsewhere, only after a sign-in click", async () => {
@@ -114,7 +114,7 @@ describe("GithubAccess", () => {
     await outside.access.token();
     outside.setSilent("session");
     await outside.access.sessionsChanged();
-    assert.equal(outside.access.hasAccess, true);
+    assert.equal(outside.access.status, "granted");
     assert.equal(outside.events.granted, 0);
     assert.ok(outside.requests.every((request) => !request.interactive));
 
@@ -131,7 +131,7 @@ describe("GithubAccess", () => {
     setSilent(undefined);
     const changedBefore = events.changed;
     await access.sessionsChanged();
-    assert.equal(access.hasAccess, false);
+    assert.equal(access.status, "none");
     assert.equal(events.granted, 0);
     assert.equal(events.changed, changedBefore + 1);
   });

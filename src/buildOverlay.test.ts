@@ -659,37 +659,37 @@ describe("buildOverlay", () => {
 
     it("offers no sign-in while GitHub access is present or not yet known", () => {
       const refreshOnly = [["↻ Refresh", "packman.refreshEnrichment"]];
-      assert.deepEqual(actions({ githubAccess: true }), refreshOnly);
+      assert.deepEqual(actions({ githubAccess: "granted" }), refreshOnly);
       assert.deepEqual(actions({}), refreshOnly);
       assert.deepEqual(
-        actions({ githubAccess: true, githubPaused: true }),
+        actions({ githubAccess: "granted", githubPaused: true }),
         refreshOnly,
       );
     });
 
     it("offers a GitHub sign-in in each block while Packman has no GitHub access", () => {
-      assert.deepEqual(actions({ githubAccess: false }), [
+      assert.deepEqual(actions({ githubAccess: "none" }), [
         ["Sign in to GitHub for issue counts", "packman.signInToGithub"],
         ["↻ Refresh", "packman.refreshEnrichment"],
       ]);
       assert.equal(
-        summaries(BLOCKS, {}, { githubAccess: false }).filter(
+        summaries(BLOCKS, {}, { githubAccess: "none" }).filter(
           (lens) => lens.command === "packman.signInToGithub",
         ).length,
         2,
       );
-      assert.deepEqual(titles({}, { githubAccess: false }), [
+      assert.deepEqual(titles({}, { githubAccess: "none" }), [
         "3 deps · 0 outdated",
         "1 dep · 0 outdated",
       ]);
     });
 
     it("reads GitHub paused · Sign in to GitHub while paused without access", () => {
-      assert.deepEqual(titles({}, { githubAccess: false, githubPaused: true }), [
+      assert.deepEqual(titles({}, { githubAccess: "none", githubPaused: true }), [
         "3 deps · 0 outdated · GitHub paused",
         "1 dep · 0 outdated · GitHub paused",
       ]);
-      assert.deepEqual(actions({ githubAccess: false, githubPaused: true }), [
+      assert.deepEqual(actions({ githubAccess: "none", githubPaused: true }), [
         ["Sign in to GitHub", "packman.signInToGithub"],
         ["↻ Refresh", "packman.refreshEnrichment"],
       ]);

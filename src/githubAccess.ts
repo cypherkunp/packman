@@ -4,6 +4,12 @@ import {
   type GithubSession,
 } from "./resolveGithubToken";
 
+/**
+ * Whether Packman can make GitHub requests as an account: `unknown` until a
+ * token has been resolved once, then `granted` or `none`.
+ */
+export type GithubAccessStatus = "unknown" | "granted" | "none";
+
 export type GithubAccessOptions = {
   /** `packman.github.token`, the advanced override. */
   configuredToken: () => string | undefined;
@@ -28,13 +34,12 @@ export type GithubAccessOptions = {
  * ever asks interactively.
  */
 export class GithubAccess {
-  private access: boolean | undefined;
+  private access: GithubAccessStatus = "unknown";
   private signingIn: Promise<void> | undefined;
 
   constructor(private readonly options: GithubAccessOptions) {}
 
-  /** `undefined` until a token has been resolved once. */
-  get hasAccess(): boolean | undefined {
+  get status(): GithubAccessStatus {
     return this.access;
   }
 
@@ -44,7 +49,7 @@ export class GithubAccess {
       this.options.configuredToken(),
       (scopes) => this.options.getSession(scopes, { interactive: false }),
     );
-    this.record(token !== undefined);
+    this.record(token !== undefined ? "granted" : "none");
     return token;
   }
 
@@ -77,14 +82,14 @@ export class GithubAccess {
     } catch {
       return;
     }
-    if (!session?.accessToken?.trim() || this.access === true) {
+    if (!session?.accessToken?.trim() || this.access === "granted") {
       return;
     }
-    this.record(true);
+    this.record("granted");
     this.options.onGranted();
   }
 
-  private record(access: boolean): void {
+  private record(access: GithubAccessStatus): void {
     if (access !== this.access) {
       this.access = access;
       this.options.onChange();
