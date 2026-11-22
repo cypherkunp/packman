@@ -6,8 +6,10 @@
 - New Overlay in the text editor, which never changes the file:
   - a ▶ Run action above each script, or a single "Trust workspace to run scripts" action in untrusted workspaces (diffs and `git:` views get none);
   - a short signal at the end of each Dependency's line: `→ 2.0.0` when a newer version is out, `✓ latest`, a Socket score, or what failed;
-  - a hover on each Dependency with its latest version, npm and GitHub links, open issues + PRs and Socket score. GitHub is fetched only when you hover, to stay within its rate limit;
+  - a hover on each Dependency with its latest version, npm and GitHub links, open issues + PRs and Socket score, read from what was already fetched;
   - a summary above each dependency block (`12 deps · 2 outdated`, Socket alerts, `GitHub paused`) with a ↻ Refresh action.
+
+  Signals, including GitHub, are fetched only when you open or switch to a `package.json` (visible Dependencies first, cached for an hour), type a new Dependency, or click Refresh, which covers visible editors only. Nothing is fetched in the background or retried when GitHub resumes.
 
   Turn it off with `packman.overlay.enabled`, or hide it for the session with Packman: Toggle Overlay.
 - "Packman: Open Edit Mode" is now **Packman: Open in Text Editor**, and UI mode's Edit mode button is now **Text editor**.

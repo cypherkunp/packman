@@ -158,6 +158,35 @@ export function overlayDependencies(text: string): DependencyRow[] {
   return dependencyNodes(root).map(({ name, range }) => ({ name, range }));
 }
 
+/** Inclusive start and exclusive end lines, like an editor's visible range. */
+export type OverlayLineRange = { start: number; end: number };
+
+/**
+ * `overlayDependencies`, with the Dependencies whose entry starts inside one
+ * of `visibleRanges` moved to the front (document order kept within each
+ * part), so what is on screen is fetched first.
+ */
+export function overlayDependenciesVisibleFirst(
+  text: string,
+  visibleRanges: readonly OverlayLineRange[] = [],
+): DependencyRow[] {
+  const root = parseWellFormed(text);
+  if (root?.type !== "object") {
+    return [];
+  }
+  const toRange = rangeMapper(text);
+  const visible: DependencyRow[] = [];
+  const rest: DependencyRow[] = [];
+  for (const { name, range, property } of dependencyNodes(root)) {
+    const line = toRange(property).start.line;
+    const onScreen = visibleRanges.some(
+      (visibleRange) => line >= visibleRange.start && line < visibleRange.end,
+    );
+    (onScreen ? visible : rest).push({ name, range });
+  }
+  return [...visible, ...rest];
+}
+
 /** The registry (npm) Dependencies: the ones that get enrichment. */
 function dependencyNodes(root: JsonNode): DependencyNode[] {
   return allDependencyNodes(root).filter((dependency) => !dependency.source);

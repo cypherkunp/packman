@@ -4,7 +4,7 @@ import {
   githubPart,
   type EnrichedDependencyRow,
 } from "./enrichDependencyRow";
-import type { EnrichmentCache } from "./enrichmentCache";
+import { ENRICHMENT_TTL_MS, type EnrichmentCache } from "./enrichmentCache";
 import type { FetchLike } from "./fetchNpmLatest";
 import { fetchSocketScoresByPurl } from "./fetchSocketScores";
 import type { GithubBudget } from "./githubBudget";
@@ -19,6 +19,9 @@ import type { SocketCredentials } from "./socketCredentials";
 export type EnrichmentStoreSources = {
   cache: EnrichmentCache<unknown>;
   fetchImpl?: FetchLike;
+  /** Clock for entry expiry; entries live as long as the cache TTL. */
+  now?: () => number;
+  ttlMs?: number;
 };
 
 export type EagerEnrichmentOptions = {
@@ -43,13 +46,16 @@ export type GithubEnrichmentOptions = {
  */
 export class EnrichmentStore {
   private readonly entries = new Map<string, EnrichedDependencyRow>();
+  /** When each entry's eager part was fetched, for expiry. */
+  private readonly storedAt = new Map<string, number>();
   private readonly eagerInFlight = new Map<
     string,
     Promise<EnrichedDependencyRow>
   >();
   /** Last degraded eager row per name: not stored, but reused by GitHub. */
   private readonly degraded = new Map<string, EnrichedDependencyRow>();
-  private readonly githubLoaded = new Set<string>();
+  /** When each Dependency's GitHub part was loaded, for expiry. */
+  private readonly githubLoaded = new Map<string, number>();
   private readonly githubInFlight = new Map<
     string,
     Promise<EnrichedDependencyRow>
@@ -101,7 +107,11 @@ export class EnrichmentStore {
     options: GithubEnrichmentOptions = {},
   ): Promise<EnrichedDependencyRow> {
     const loaded = this.entries.get(row.name);
-    if (loaded && this.githubLoaded.has(row.name) && !options.forceRefresh) {
+    if (
+      loaded &&
+      this.isFresh(this.githubLoaded.get(row.name)) &&
+      !options.forceRefresh
+    ) {
       return { ...loaded, range: row.range };
     }
     let pending = this.githubInFlight.get(row.name);
@@ -122,6 +132,7 @@ export class EnrichmentStore {
   /** Forget everything (the refresh command also clears the cache). */
   clear(): void {
     this.entries.clear();
+    this.storedAt.clear();
     this.eagerInFlight.clear();
     this.degraded.clear();
     this.githubLoaded.clear();
@@ -147,7 +158,7 @@ export class EnrichmentStore {
     const stored = this.entries.get(row.name);
     if (!degraded && stored && !options.signal?.aborted) {
       this.entries.set(row.name, { ...stored, ...githubPart(enriched) });
-      this.githubLoaded.add(row.name);
+      this.githubLoaded.set(row.name, this.now());
     }
     return enriched;
   }
@@ -158,7 +169,11 @@ export class EnrichmentStore {
   ): Promise<EnrichedDependencyRow> {
     const signal = options.signal;
     const stored = this.entries.get(row.name);
-    if (stored && !options.forceRefresh) {
+    if (
+      stored &&
+      this.isFresh(this.storedAt.get(row.name)) &&
+      !options.forceRefresh
+    ) {
       return Promise.resolve(stored);
     }
     const pending = this.eagerInFlight.get(row.name);
@@ -185,12 +200,25 @@ export class EnrichmentStore {
         } else {
           this.degraded.delete(row.name);
           this.entries.set(row.name, enriched);
+          this.storedAt.set(row.name, this.now());
         }
       }
       return enriched;
     });
     this.eagerInFlight.set(row.name, started);
     return started;
+  }
+
+  private now(): number {
+    return this.sources.now?.() ?? Date.now();
+  }
+
+  /** Whether something stored at `at` is still within the cache lifetime. */
+  private isFresh(at: number | undefined): boolean {
+    if (at === undefined) {
+      return false;
+    }
+    return this.now() - at <= (this.sources.ttlMs ?? ENRICHMENT_TTL_MS);
   }
 
   private async withSocket(
