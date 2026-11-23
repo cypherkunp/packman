@@ -20,6 +20,7 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write # Marketplace trusted publishing (OIDC)
 
 jobs:
   release:
@@ -69,9 +70,7 @@ jobs:
 
       - name: Publish to the VS Code Marketplace
         if: steps.plan.outputs.publish == 'true'
-        run: npx vsce publish --skip-duplicate --packagePath "packman-${{ steps.plan.outputs.version }}.vsix"
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --oidc --skip-duplicate --packagePath "packman-${{ steps.plan.outputs.version }}.vsix"
 
       - name: Publish to Open VSX
         if: steps.plan.outputs.publish == 'true'
