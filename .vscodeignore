@@ -22,3 +22,4 @@ DESIGN.md
 .nvmrc
 *.vsix
 .impeccable/**
+images/*.svg
