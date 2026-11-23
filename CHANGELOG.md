@@ -2,7 +2,7 @@
 
 ## 1.1.0
 
-First release on the VS Code Marketplace and Open VSX under the new ID `startfrom.packman`. It includes everything in 0.1.0 below. If you installed an earlier build of Packman, uninstall it so the two don't both run.
+First release on the VS Code Marketplace and Open VSX under the new ID `StartFrom.packman`. It includes everything in 0.1.0 below. If you installed an earlier build of Packman, uninstall it so the two don't both run.
 
 ## 0.1.0
 

@@ -3,7 +3,7 @@
   "displayName": "Packman",
   "description": "Script runners and dependency intelligence right inside your package.json.",
   "version": "1.1.0",
-  "publisher": "startfrom",
+  "publisher": "StartFrom",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
@@ -100,12 +100,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/cypherkunp/packman.git"
+    "url": "https://github.com/startfromco/packman.git"
   },
   "bugs": {
-    "url": "https://github.com/cypherkunp/packman/issues"
+    "url": "https://github.com/startfromco/packman/issues"
   },
-  "homepage": "https://github.com/cypherkunp/packman#readme",
+  "homepage": "https://github.com/startfromco/packman#readme",
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
     "@types/node": "^24.3.1",
