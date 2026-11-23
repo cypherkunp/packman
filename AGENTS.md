@@ -51,3 +51,7 @@ Bad:
 - `Update AGENTS.md`
 - `Initial commit`
 - `Fixed stuff`
+
+## Releases
+
+**Mandatory.** A PR that changes what users of the extension get (a feature, a fix or a behaviour change) MUST include a changeset: run `npx changeset` (or write a `.changeset/<name>.md` file by hand) with the bump and a user-facing changelog line. Don't edit `version` in `package.json` or `CHANGELOG.md` by hand; the Release workflow does that. See `docs/releasing.md`.
