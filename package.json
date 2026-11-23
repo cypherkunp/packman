@@ -2,8 +2,8 @@
   "name": "packman",
   "displayName": "Packman",
   "description": "Script runners and dependency intelligence right inside your package.json.",
-  "version": "0.1.0",
-  "publisher": "cypherkunp",
+  "version": "1.1.0",
+  "publisher": "startfrom",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
@@ -92,8 +92,11 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "typecheck": "tsc -p ./ --noEmit",
-    "test": "tsx --test src/**/*.test.ts scripts/**/*.test.mjs",
-    "check": "npm run typecheck && npm test"
+    "test": "tsx --test src/**/*.test.ts",
+    "check": "npm run typecheck && npm test",
+    "changeset": "changeset",
+    "version-packages": "changeset version && npm install --package-lock-only",
+    "package": "vsce package"
   },
   "repository": {
     "type": "git",
@@ -104,12 +107,22 @@
   },
   "homepage": "https://github.com/cypherkunp/packman#readme",
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "@types/node": "^24.3.1",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^4.1.1",
+    "ovsx": "^1.4.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   },
   "dependencies": {
     "jsonc-parser": "^3.3.1"
-  }
+  },
+  "private": true,
+  "allowScripts": {
+    "@vscode/vsce-sign@2.1.1": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true
+  },
+  "icon": "images/icon.png"
 }

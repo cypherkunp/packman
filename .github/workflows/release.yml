@@ -1,0 +1,93 @@
+name: Release
+
+# On every push to main:
+# - pending changesets  -> open or update the "chore: version packages" PR
+# - no pending changesets and package.json's version has no v<version> tag yet
+#                       -> publish to the VS Code Marketplace and Open VSX,
+#                          then tag v<version> and create a GitHub release
+#                          with the VSIX attached
+# See docs/releasing.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck and test
+        run: npm run check
+
+      - name: Open or update the version PR
+        id: changesets
+        uses: changesets/action@v2
+        with:
+          version-script: npm run version-packages
+          commit-message: "chore: version packages"
+          pr-title: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Decide whether to publish
+        id: plan
+        if: steps.changesets.outputs.has-changesets == 'false'
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            echo "v$version is already released; nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Publishing v$version."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package VSIX
+        if: steps.plan.outputs.publish == 'true'
+        run: npx vsce package --out "packman-${{ steps.plan.outputs.version }}.vsix"
+
+      - name: Publish to the VS Code Marketplace
+        if: steps.plan.outputs.publish == 'true'
+        run: npx vsce publish --skip-duplicate --packagePath "packman-${{ steps.plan.outputs.version }}.vsix"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Publish to Open VSX
+        if: steps.plan.outputs.publish == 'true'
+        run: npx ovsx publish --skip-duplicate --packagePath "packman-${{ steps.plan.outputs.version }}.vsix"
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      - name: Tag and create the GitHub release
+        if: steps.plan.outputs.publish == 'true'
+        run: |
+          v="${{ steps.plan.outputs.version }}"
+          # This version's CHANGELOG section: from "## $v" up to the next "## ".
+          awk -v v="$v" '$0 == "## " v {found=1; next} found && /^## / {exit} found' CHANGELOG.md > release-notes.md
+          gh release create "v$v" "packman-$v.vsix" \
+            --target "$GITHUB_SHA" \
+            --title "v$v" \
+            --notes-file release-notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
