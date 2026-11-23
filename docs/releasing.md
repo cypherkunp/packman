@@ -1,6 +1,6 @@
 # Releasing
 
-Packman is published as **`startfrom.packman`** to the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=startfrom.packman) and [Open VSX](https://open-vsx.org/extension/startfrom/packman). Versions and the changelog are managed with [Changesets](https://github.com/changesets/changesets), and publishing is automated by `.github/workflows/release.yml`.
+Packman is published as **`StartFrom.packman`** to the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=StartFrom.packman) and [Open VSX](https://open-vsx.org/extension/StartFrom/packman). Versions and the changelog are managed with [Changesets](https://github.com/changesets/changesets), and publishing is automated by `.github/workflows/release.yml`.
 
 ## Day to day
 
@@ -19,17 +19,26 @@ Use `major` for breaking changes, `minor` for features and `patch` for fixes.
 
 ### VS Code Marketplace
 
-1. Make sure the `startfrom` publisher exists at <https://marketplace.visualstudio.com/manage>.
-2. Create an Azure DevOps Personal Access Token at <https://dev.azure.com> → User settings → Personal access tokens:
-   - **Organization:** All accessible organizations
-   - **Scopes:** Custom defined → **Marketplace → Manage**
-3. Add it as the `VSCE_PAT` repository secret.
+Publishing uses **trusted publishing** (GitHub Actions OIDC), so there is no Marketplace token to store or rotate. `vsce publish --oidc` exchanges the workflow's OIDC token for a short-lived Marketplace credential, which is why the workflow has `id-token: write`.
+
+At <https://marketplace.visualstudio.com/manage> → **StartFrom** → **Trusted Publishing** → **Create**:
+
+| Field | Value |
+| --- | --- |
+| Policy name | `Release workflow` |
+| Provider | GitHub Actions |
+| Repository owner | `startfromco` |
+| Repository | `packman` |
+| Workflow | `release.yml` |
+| Environment | *(leave empty)* |
+
+If you rename or move `.github/workflows/release.yml`, or transfer the repo, update the policy to match, or publishing fails with an authentication error.
 
 ### Open VSX
 
 1. Sign in at <https://open-vsx.org> with GitHub and sign the Eclipse Publisher Agreement (Profile page).
 2. Create an access token under Settings → Access Tokens.
-3. Create the namespace once: `npx ovsx create-namespace startfrom -p <token>`. To get the verified badge, claim the namespace through an issue at <https://github.com/EclipseFdn/open-vsx.org>.
+3. Create the namespace once: `npx ovsx create-namespace StartFrom -p <token>`. To get the verified badge, claim the namespace through an issue at <https://github.com/EclipseFdn/open-vsx.org>.
 4. Add the token as the `OVSX_PAT` repository secret.
 
 ### GitHub
@@ -41,7 +50,7 @@ Use `major` for breaking changes, `minor` for features and `patch` for fixes.
 
 ```sh
 npx vsce package --out packman.vsix
-npx vsce publish --packagePath packman.vsix -p "$VSCE_PAT"
+npx vsce publish --packagePath packman.vsix -p "$VSCE_PAT"  # a PAT with Marketplace → Manage
 npx ovsx publish --packagePath packman.vsix -p "$OVSX_PAT"
 git tag "v$(node -p "require('./package.json').version")" && git push --tags
 ```
