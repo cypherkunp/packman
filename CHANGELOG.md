@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0
+
+First release on the VS Code Marketplace and Open VSX under the new ID `startfrom.packman`. It includes everything in 0.1.0 below. If you installed an earlier build of Packman, uninstall it so the two don't both run.
+
 ## 0.1.0
 
 **Breaking: Packman is now Overlay-only.** `package.json` opens in the normal text editor, and Packman's information sits on top of the text instead of in a separate page. UI mode (the webview) is removed, along with **Packman: Open UI Mode**, **Packman: Open Edit Mode** and the `Cmd/Ctrl+Shift+M` keybinding. If you had made UI mode the default editor for `package.json`, Packman offers once to remove that association; it never changes your settings without the click.

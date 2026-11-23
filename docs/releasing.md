@@ -13,7 +13,7 @@ Packman is published as **`startfrom.packman`** to the [VS Code Marketplace](htt
 
 A push to `main` publishes only when there are no pending changesets **and** `v<version>` isn't tagged yet. To retry a failed publish, re-run the workflow, or run it from the Actions tab (`workflow_dispatch`).
 
-Before 1.0.0, use `minor` for breaking changes and `patch` for everything else.
+Use `major` for breaking changes, `minor` for features and `patch` for fixes.
 
 ## One-time setup
 
